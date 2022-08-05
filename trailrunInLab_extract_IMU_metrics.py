@@ -3,6 +3,7 @@
 Created on Wed Apr 13 13:01:41 2022
 
 @author: Eric.Honert
+
 """
 
 # Import Libraries
@@ -97,7 +98,7 @@ def align_fuse_extract_IMU(LGdat,HGdat):
     
     return [LGtime,acc,gyr]
 
-def estIMU_HS_MS(acc,gyr,t):
+def estIMU_HS_MS(acc,gyr,t,HS_thresh):
     """
     Function to estimate heel-strike and mid-stance indices from the IMU
 
@@ -134,20 +135,20 @@ def estIMU_HS_MS(acc,gyr,t):
     # MS = []
     
     while jj < len(HS_sig)-1000:
-        if HS_sig[jj] > 5e8:
+        if HS_sig[jj] > HS_thresh:
             # Find the maximum
             HS_idx = np.argmin(acc[jj-window:jj+window,0])
             HS.append(jj-window+HS_idx)
             jj = jj+500
         jj = jj+1
             
-    HS = np.array(HS[:-1])
     # Compute the mid-stance indicies
     MS = np.array([(np.argmin(MS_sig[HS[jj]+10:HS[jj]+int((HS[jj+1]-HS[jj])*0.2)])+HS[jj]+10)  for jj in range(len(HS)-1)]) 
     # MS = []
     # for jj in range(len(HS)-1):
     #     print(jj)
     #     MS.append(np.argmin(MS_sig[HS[jj]+10:HS[jj]+int((HS[jj+1]-HS[jj])*0.2)])+HS[jj]+10)
+    HS = np.array(HS[:-1])
         
     
     return [HS,MS]
@@ -199,7 +200,6 @@ def computeRunSpeedIMU(acc,gyr,HS,MS,GS,t):
     MS_frames = 20
     
     run_speed = []
-    GS = GS[0:-2]
     
     for count,jj in enumerate(GS):
         # Obtain the acceleration and gyroscope from foot contact (HS) to the
@@ -316,223 +316,153 @@ def findRotToLab(accel_vec):
     theta = theta*180/np.pi
     return theta
 
+def filtIMUsig(sig_in,cut,t):
+    # Set up a 2nd order 50 Hz low pass buttworth filter
+    freq = 1/np.mean(np.diff(t))
+    w = cut / (freq / 2) # Normalize the frequency
+    b, a = sig.butter(2, w, 'low')
+    # Filter the IMU signals
+    sig_out = np.array([sig.filtfilt(b, a, sig_in[:,jj]) for jj in range(3)]).T    
+    return(sig_out)
 
-# Grab the GPS data for the timing of segments
-GPStiming = pd.read_csv('C:\\Users\eric.honert\\Boa Technology Inc\\PFL Team - General\\Testing Segments\\EndurancePerformance\\TrailRun_2022\\CombinedGPS.csv')
+
 # Obtain IMU signals
-fPath = 'C:\\Users\\eric.honert\\Boa Technology Inc\\PFL Team - General\\Testing Segments\\EndurancePerformance\\TrailRun_2022\\IMUData\\'
+fPath = 'C:\\Users\\eric.honert\\Boa Technology Inc\\PFL Team - General\\Testing Segments\\EndurancePerformance\\TrailRun_2022\\InLabData\\IMUData\\'
 
-# Right High and Low G accelerometers: note that the gyro is in the low G file
-RHentries = [fName for fName in os.listdir(fPath) if fName.endswith('highg.csv') and fName.count('00218')]
-RLentries = [fName for fName in os.listdir(fPath) if fName.endswith('lowg.csv') and fName.count('00218')]
-
-# Left High and Low G accelerometers: note that the gyro is in the low G file
-LHentries = [fName for fName in os.listdir(fPath) if fName.endswith('highg.csv') and fName.count('00880')]
-LLentries = [fName for fName in os.listdir(fPath) if fName.endswith('lowg.csv') and fName.count('00880')]
-
-# 
 save_on = 2
 
-Subject = []
-Config = []
-Sesh = []
+# High and Low G accelerometers: note that the gyro is in the low G file
+Hentries = [fName for fName in os.listdir(fPath) if fName.endswith('highg.csv') and fName.count('00218')]
+Lentries = [fName for fName in os.listdir(fPath) if fName.endswith('lowg.csv') and fName.count('00218')]
 
+# 
 oSubject = []
 oConfig = []
 oSesh = []
-oLabel = np.array([])
-oSpeed = np.array([])
+oSpeed = []
+oLabel = []
 
-# Index through the GPS file as that has all entries possible
-for ii in range(116,len(GPStiming)):
-    # Find the correct files if there
-    GPSstr = GPStiming.Subject[ii] + '-' + GPStiming.Config[ii] + '-' + str(GPStiming.Sesh[ii])
+pGyr = []
+pJerk = []
+rMLacc = []
+rIEgyro = []
+imuSpeed = []
+
+# Filtering frequencies
+acc_cut = 50
+gyr_cut = 30
+
+# Index through the low-g files
+for ii in range(96,len(Lentries)):
+    print(Lentries[ii])
+    # Load the trials here
+    Ldf = pd.read_csv(fPath + Lentries[ii],sep=',', header = 0)
+    Hdf = pd.read_csv(fPath + Hentries[ii],sep=',', header = 0)
+    # Save trial information
+    Subject = Lentries[ii].split(sep = "-")[0]
+    Config = Lentries[ii].split(sep="-")[1]
+    Speed = Lentries[ii].split(sep="-")[2]
+    Slope = Lentries[ii].split(sep="-")[3]
+    Sesh = Lentries[ii].split(sep="-")[4][0]
+    if Slope == 'p4':
+        Label = '1'
+    elif Slope == 'p2':
+        Label = '2'
+    elif Slope == 'n6':
+        Label = '3'
     
-    GoodR = 0; Rtrial = []
-    for jj, entry in enumerate(RLentries):
-        if GPSstr in entry:
-            GoodR = 1
-            Rtrial = jj
+
     
-    GoodL = 0; Ltrial = []
-    for jj, entry in enumerate(LLentries):
-        if GPSstr in entry:
-            GoodL = 1
-            Ltrial = jj
-    #__________________________________________________________________________
-    # Foot contact and trial start detection
-    # Conditional statement
-    if GoodR*GoodL == 1:
-        print(RLentries[Rtrial])
-        print('Both Sides')
-        # Load the trials here
-        RLdf = pd.read_csv(fPath + RLentries[Rtrial],sep=',', header = 0)
-        RHdf = pd.read_csv(fPath + RHentries[Rtrial],sep=',', header = 0)
+    [IMUtime,iacc,igyr] = align_fuse_extract_IMU(Ldf,Hdf)
+    # Convert the time
+    IMUtime = (IMUtime - IMUtime[0])*(1e-6)        
+    # Identify foot contact & midstance
+    [iHS,iMS] = estIMU_HS_MS(iacc,igyr,IMUtime,5e8)
+    
+    # Examine where the start of the trial is by the 3 jumps
+    # There should seem to be 2 "short" strides followed by a pause
+    approx_CT = np.diff(iHS)
+    iHS_t = IMUtime[iHS]
+    
+    # Trial 40 started late:
+    if Lentries[ii] == 'IS02-pfs-ps-p4-1_TS-00218_2022-07-19-15-03-21_lowg.csv':
+        idx = (iHS_t > 10)*(iHS_t < 55)
+        iHS = iHS[idx]
+        iHS_t = iHS_t[idx]
+        iMS = iMS[idx]
+    else: 
+        # Counters
+        jc = 0  # jump counter
+        stc = 0 # start trial counter
+        jj = 0
+        up_thresh = 5e8
         
-        LLdf = pd.read_csv(fPath + LLentries[Ltrial],sep=',', header = 0)
-        LHdf = pd.read_csv(fPath + LHentries[Ltrial],sep=',', header = 0)
-        
-        [Rtime,Racc,Rgyr] = align_fuse_extract_IMU(RLdf,RHdf)
-        [Ltime,Lacc,Lgyr] = align_fuse_extract_IMU(LLdf,LHdf)
-        
-        # Ensure that the start times (based on the UNIX time stamp) are approx.
-        # the same value: note not as important to have the left and right IMU be
-        # EXACTLY the same as comparisons are not made between left and right feet
-        if (Rtime[0]-Ltime[0]) > 0:
-            # The left IMU has more initial data
-            idx = Ltime > Rtime[0]
-            Ltime = Ltime[idx]
-            Lacc = Lacc[idx,:]
-            Lgyr = Lgyr[idx,:]
-        elif (Ltime[0]-Rtime[0]) > 0:
-            # The right IMU has more initial data
-            idx = Rtime > Ltime[0]
-            Rtime = Rtime[idx]
-            Racc = Racc[idx,:]
-            Rgyr = Rgyr[idx,:]
-        
-        # Convert the time
-        Rtime = (Rtime - Rtime[0])*(1e-6)
-        Ltime = (Ltime - Ltime[0])*(1e-6)
-        
-        # Identify foot contact & midstance
-        [LHS,LMS] = estIMU_HS_MS(Lacc,Lgyr,Ltime)
-        [RHS,RMS] = estIMU_HS_MS(Racc,Rgyr,Rtime)
-        # Examine where the start of the trial is by the 3 jumps
-        LHS_t = Ltime[LHS]
-        RHS_t = Rtime[RHS]
-        HSidx_start = []
-        for jj in range(10):
-            if np.min(np.abs(LHS_t[jj]-RHS_t[0:10])) < 0.1: 
-                print('Jump Found')
-                HSidx_start = [jj,np.argmin(np.abs(LHS_t[jj]-RHS_t[0:10]))]
-        if len(HSidx_start) == 0:
-            HSidx_start = [0,0]  
+        while stc == 0:
+            if approx_CT[jj] < 1500:
+                jc = jc+1
+            if jc >= 2 and approx_CT[jj] > 2000:
+                idx = (iHS_t > (iHS_t[jj] + 10))*(iHS_t < (iHS_t[jj] + 55))
+                iHS = iHS[idx]
+                iHS_t = iHS_t[idx]
+                iMS = iMS[idx]
+                stc = 1
             
-        L_start = LHS_t[HSidx_start[0]]; R_start = RHS_t[HSidx_start[1]]
-        # Limit the foot contact events to those after the hops
-        LHS = LHS[HSidx_start[0]+1:-1]; LMS = LMS[HSidx_start[0]+1:-1]
-        RHS = RHS[HSidx_start[1]+1:-1]; RMS = RMS[HSidx_start[1]+1:-1]
-        LHS_t = Ltime[LHS]; RHS_t = Rtime[RHS]
+            jj = jj+1
+            
+            if jj > 10:
+                up_thresh = up_thresh - 2e8
+                [iHS,iMS] = estIMU_HS_MS(iacc,igyr,IMUtime,up_thresh)
+                approx_CT = np.diff(iHS)
+                iHS_t = IMUtime[iHS]
+                jj = 0
         
-    elif GoodR == 1:
-        print(RLentries[Rtrial])
-        print('Right Side Only')
-
-        # Load the trials here
-        RLdf = pd.read_csv(fPath + RLentries[Rtrial],sep=',', header = 0)
-        RHdf = pd.read_csv(fPath + RHentries[Rtrial],sep=',', header = 0)
-        
-        [Rtime,Racc,Rgyr] = align_fuse_extract_IMU(RLdf,RHdf)
-        # Convert the time
-        Rtime = (Rtime - Rtime[0])*(1e-6)
-        # Identify foot contact & midstance
-        [RHS,RMS] = estIMU_HS_MS(Racc,Rgyr,Rtime)
-        # Generally, the first 3 detected HS are from hops (manually checked as well)
-        R_start = Rtime[RHS[2]]
-        RHS = RHS[3:]; RMS = RMS[3:] 
-        RHS_t = Rtime[RHS]        
-  
-    elif GoodL == 1:
-        print(LLentries[Ltrial])
-        print('Left Side Only')
-
-        # Load the trials here
-        LLdf = pd.read_csv(fPath + LLentries[ii],sep=',', header = 0)
-        LHdf = pd.read_csv(fPath + LHentries[ii],sep=',', header = 0)
-        
-        [Ltime,Lacc,Lgyr] = align_fuse_extract_IMU(LLdf,LHdf)
-        # Convert the time
-        Ltime = (Ltime - Ltime[0])*(1e-6)
-        # Identify foot contact & midstance
-        [LHS,LMS] = estIMU_HS_MS(Lacc,Lgyr,Ltime)
-        # Generally, the first 3 detected HS are from hops (manually checked as well)
-        L_start = Ltime[LHS[2]]
-        LHS = LHS[3:]; LMS = LMS[3:]
-        LHS_t = Ltime[LHS]
-        
-    else:
-        print('No Trial found')
-    #__________________________________________________________________________
-    # Deriving metrics
     
-    if GoodR == 1:
-        # Find good strides
-        RGS = np.where((np.diff(RHS) > 0.5)*(np.diff(RHS_t) < 1.5))[0]
-        # IMU-based speed
-        Rspeed = computeRunSpeedIMU(Racc,Rgyr,RHS,RMS,RGS,Rtime)
-        RGS = RGS[0:-2]
-        
-        # Create labels for saving data
-        Rlabel = np.array([0]*len(Rspeed))
-        # Uphill label
-        idx = RHS_t[RGS] < float(GPStiming.EndS1[ii]+R_start)
-        Rlabel[idx] = 1
-        # Top label
-        idx = (RHS_t[RGS] > float(GPStiming.StartS2[ii]+R_start))*(RHS_t[RGS] < float(GPStiming.EndS2[ii]+R_start))
-        Rlabel[idx] = 2
-        # Bottom label
-        idx = RHS_t[RGS] > float(GPStiming.StartS3[ii]+R_start)
-        Rlabel[idx] = 3
-        
-        # Appending
-        oSubject = oSubject + [GPStiming.Subject[ii]]*len(Rspeed)
-        oConfig = oConfig + [GPStiming.Config[ii]]*len(Rspeed)
-        oSesh = oSesh + [GPStiming.Sesh[ii]]*len(Rspeed)
-        oLabel = np.concatenate((oLabel,Rlabel),axis = None)
-        oSpeed = np.concatenate((oSpeed,Rspeed),axis = None)
+    plt.figure(ii)
+    plt.plot(iacc[:,0])
+    plt.plot(iHS,iacc[iHS,0],'ko')
     
-    if GoodL == 1:
-        # Define good strides
-        LGS = np.where((np.diff(LHS) > 0.5)*(np.diff(LHS_t) < 1.5))[0]
-        # IMU-based speed
-        Lspeed = computeRunSpeedIMU(Lacc,Lgyr,LHS,LMS,LGS,Ltime)
-        LGS = LGS[0:-2]
-  
-        # Create labels for saving data
-        Llabel = np.array([0]*len(Lspeed))
-        # Uphill label
-        idx = LHS_t[LGS] < float(GPStiming.EndS1[ii]+L_start)
-        Llabel[idx] = 1
-        # Top label
-        idx = (LHS_t[LGS] > float(GPStiming.StartS2[ii]+L_start))*(LHS_t[LGS] < float(GPStiming.EndS2[ii]+L_start))
-        Llabel[idx] = 2
-        # Bottom label
-        idx = LHS_t[LGS] > float(GPStiming.StartS3[ii]+L_start)
-        Llabel[idx] = 3
+    iGS = np.where((np.diff(iHS_t) > 0.5)*(np.diff(iHS_t) < 1.5))[0]
+    # Compute IMU running speed
+    imuSpeed = np.concatenate((imuSpeed,computeRunSpeedIMU(iacc,igyr,iHS,iMS,iGS,IMUtime)),axis = None)
+    
+    # Filter the IMU signals
+    iacc = filtIMUsig(iacc,acc_cut,IMUtime)
+    igyr = filtIMUsig(igyr,gyr_cut,IMUtime)
+    # Compute stride metrics here
+    jerk = np.linalg.norm(np.array([np.gradient(iacc[:,jj],IMUtime) for jj in range(3)]),axis=0)
+    for jj in iGS:
+        pJerk.append(np.max(jerk[iHS[jj]:iHS[jj+1]]))
+        pGyr.append(np.abs(np.min(igyr[iHS[jj]:iHS[jj+1],1])))
+        rMLacc.append(np.max(iacc[iHS[jj]:iHS[jj+1],1])-np.min(iacc[iHS[jj]:iHS[jj+1],1]))
+        appTO = round(0.2*(iHS[jj+1]-iHS[jj])+iHS[jj])
+        rIEgyro.append(np.max(igyr[iHS[jj]:appTO,2])-np.min(igyr[iHS[jj]:appTO,2]))
         
-        oSubject = oSubject + [GPStiming.Subject[ii]]*len(Lspeed)
-        oConfig = oConfig + [GPStiming.Config[ii]]*len(Lspeed)
-        oSesh = oSesh + [GPStiming.Sesh[ii]]*len(Lspeed)
-        oLabel = np.concatenate((oLabel,Llabel),axis = None)
-        oSpeed = np.concatenate((oSpeed,Lspeed),axis = None)
+    # Appending
+    oSubject = oSubject + [Subject]*len(iGS)
+    oConfig = oConfig + [Config]*len(iGS)
+    oSpeed = oSpeed + [Speed]*len(iGS)
+    oLabel = oLabel + [Label]*len(iGS)
+    oSesh = oSesh + [Sesh]*len(iGS)
     
     # Clear variables
-    LHS = []; RHS = []; LGS = []; RGS = []
-
+    iHS = []; iGS = []
+    
         
-outcomes = pd.DataFrame({'Subject':list(oSubject), 'Config': list(oConfig),'Sesh': list(oSesh),
-                         'Label':list(oLabel), 'Speed':list(oSpeed)})
+outcomes = pd.DataFrame({'Subject':list(oSubject), 'Config': list(oConfig),'Label':list(oLabel), 'Speed':list(oSpeed), 'Sesh': list(oSesh),
+                          'pJerk':list(pJerk), 'pGyr':list(pGyr),'rMLacc':list(rMLacc),'rIEgyro':list(rIEgyro),'imuSpeed':list(imuSpeed)})
 if save_on == 1:
-    outcomes.to_csv('C:\\Users\eric.honert\\Boa Technology Inc\\PFL Team - General\\Testing Segments\\EndurancePerformance\\TrailRun_2022\\IMUspeed.csv',header=True)
+    outcomes.to_csv('C:\\Users\eric.honert\\Boa Technology Inc\\PFL Team - General\\Testing Segments\\EndurancePerformance\\TrailRun_2022\\InLabIMUmetrics.csv',header=True)
 elif save_on == 2:
-    outcomes.to_csv('C:\\Users\eric.honert\\Boa Technology Inc\\PFL Team - General\\Testing Segments\\EndurancePerformance\\TrailRun_2022\\IMUspeed.csv',mode = 'a',header=False)
+    outcomes.to_csv('C:\\Users\eric.honert\\Boa Technology Inc\\PFL Team - General\\Testing Segments\\EndurancePerformance\\TrailRun_2022\\InLabIMUmetrics.csv',mode = 'a',header=False)
 
 
-plt.figure(2)
-plt.plot(Rtime,Racc[:,0])
-plt.plot(Ltime,Lacc[:,0])
-plt.legend(['Right','Left'])
-plt.plot(Rtime[RHS],Racc[RHS,0],'ko')
-plt.plot(Ltime[LHS],Lacc[LHS,0],'ro')
-plt.ylabel('Vertical Acceleration [m/s^2]')
-plt.xlabel('Trial Time [sec]')
+# plt.figure(3)
 
-plt.figure(3)
-plt.plot(Rtime[RHS[RGS]],Rspeed)
-plt.plot(Ltime[LHS[LGS]],Lspeed)
-plt.ylabel('Running Speed [m/s]')
-plt.xlabel('Trial Time [sec]')
-plt.legend(['Right','Left'])
+# plt.figure(3)
+# plt.plot(Rtime[RHS[RGS[0:-2]]],Rspeed)
+# plt.plot(Ltime[LHS[LGS[0:-2]]],Lspeed)
+# plt.ylabel('Running Speed [m/s]')
+# plt.xlabel('Time in Trial [sec]')
+# plt.legend(['Right','Left'])
     
 

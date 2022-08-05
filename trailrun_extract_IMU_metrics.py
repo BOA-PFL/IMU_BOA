@@ -3,6 +3,10 @@
 Created on Wed Apr 13 13:01:41 2022
 
 @author: Eric.Honert
+
+Notes:
+    This code should only be run after extracting metrics from the GPS watch:
+    the saved file will contain 
 """
 
 # Import Libraries
@@ -152,175 +156,22 @@ def estIMU_HS_MS(acc,gyr,t):
     
     return [HS,MS]
 
-def computeRunSpeedIMU(acc,gyr,HS,MS,GS,t):
-    """
-    Estimate running speed from IMU signals. 
-    
-    This function rotates the accleration signal into an inertial coordinate
-    system based on the integrand of the gyscrope signal. This rotation is
-    performed in order to account for the gravitational acceleration. The
-    corrected inertial coordinate system accleration is then double
-    integrated to estimate the displacement. The integrations are linearly
-    corrected. Note that all time continuous signals span from foot contact
-    to the subsequent midstance. The final dispacement calculation is from
-    foot contact to the subsiquent foot contact.
-
-    Parameters
-    ----------
-    acc : numpy array (Nx3)
-        X,Y,Z acceleration from the IMU
-    gyr : numpy array (Nx3)
-        X,Y,Z gyroscope from the IMU
-    HS : list
-        Heel-strike (foot contact events) indices
-    MS : list
-        Mid-stance indices
-    GS : list
-        Indices that indicate good strides
-    t : numpy array (Nx1)
-        time (seconds)
-
-    Returns
-    -------
-    run_speed : list
-        Step-by-step running speed
-
-    """
+def filtIMUsig(sig_in,cut,t):
     # Set up a 2nd order 50 Hz low pass buttworth filter
     freq = 1/np.mean(np.diff(t))
-    w = 50 / (freq / 2) # Normalize the frequency
+    w = cut / (freq / 2) # Normalize the frequency
     b, a = sig.butter(2, w, 'low')
-    
     # Filter the IMU signals
-    acc_filt = np.array([sig.filtfilt(b, a, acc[:,jj]) for jj in range(3)]).T
-    gyr_filt = np.array([sig.filtfilt(b, a, gyr[:,jj]) for jj in range(3)]).T    
-    
-    # Indicate the number of frames to examine the gravity during midstance
-    MS_frames = 20
-    
-    run_speed = []
-    GS = GS[0:-2]
-    
-    for count,jj in enumerate(GS):
-        # Obtain the acceleration and gyroscope from foot contact (HS) to the
-        # subsiquent midstance (MS). MS is needed for linear drift correction
-        acc_stride_plus = acc_filt[HS[jj]:MS[jj+1],:]
-        gyr_stride_plus = gyr_filt[HS[jj]:MS[jj+1],:]
-        time_stride_plus = t[HS[jj]:MS[jj+1]]
-        time_stride = t[HS[jj]:HS[jj+1]]
-        
-        # Need the midstance and next foot contact indices
-        MS_idx = MS[jj]-HS[jj]
-        HS_idx = HS[jj+1]-HS[jj]
-        
-        Fflat_accel = np.mean(acc_stride_plus[MS_idx:MS_idx+MS_frames,:],axis = 0)/np.mean(np.linalg.norm(acc_stride_plus[MS_idx:MS_idx+MS_frames,:],axis = 1)).T
-        
-        # Rotation to the gravity vector: provides initial contidion for gyro integration
-        thetai = findRotToLab(Fflat_accel)
-        
-        # Integrate and linearly correct the gyroscope
-        theta = cumtrapz(gyr_stride_plus,time_stride_plus,initial=0,axis=0)
-        theta = theta-theta[MS_idx,:] # Midstance should be zero
-        # Linear correction
-        slope = theta[-1,:]/(len(theta)-MS_idx-1)
-        drift = (slope*np.ones([len(theta),3]))*(np.array([range(len(theta)),range(len(theta)),range(len(theta))])).T
-        drift = drift-drift[MS_idx,:]
-        # Gyro integration initial condition
-        if count == 0:
-           theta = theta-thetai
-           thetai_up = thetai
-        else: 
-           theta = theta-(thetai+thetai_up)/2
-           thetai_up = thetai
-        
-        # Convert to radians
-        theta = theta*np.pi/180
-        # Rotate the accelerometer into the lab coordinate system (LCS)
-        
-        # Note: this rotation has been converted to list comprehension for speed purposes
-        acc_stride_plus_LCS = [(np.array([[cos(ang[2]),-sin(ang[2]),0],[sin(ang[2]),cos(ang[2]),0],[0,0,1]])@np.array([[1,0,0],[0,cos(ang[0]),-sin(ang[0])],[0,sin(ang[0]),cos(ang[0])]])@np.array([[cos(ang[1]),0,sin(ang[1])],[0,1,0],[-np.sin(ang[1]),0,cos(ang[1])]])@acc_stride_plus[kk,:].T).T-np.array([9.81,0,0]) for kk,ang in enumerate(theta)]
-        
-        # The written out loop for the rotation is as follows:
-        # acc_stride_plus_LCS = np.zeros([len(acc_stride_plus),3])
-        # for kk,ang in enumerate(theta):
-        #     # Create the rotation matrix
-        #     rotZ = np.array([[cos(ang[2]),-sin(ang[2]),0],
-        #                     [sin(ang[2]),cos(ang[2]),0],
-        #                     [0,0,1]])
-        #     rotY = np.array([[cos(ang[1]),0,sin(ang[1])],
-        #                     [0,1,0],
-        #                     [-np.sin(ang[1]),0,cos(ang[1])]])
-        #     rotX = np.array([[1,0,0],
-        #                     [0,cos(ang[0]),-sin(ang[0])],
-        #                     [0,sin(ang[0]),cos(ang[0])]])
-            
-        #     rot = rotZ @ rotX @ rotY
-        #     acc_stride_plus_LCS[kk,:] = (rot @ acc_stride_plus[kk,:].T).T-np.array([9.81,0,0])
-
-        # Integrate to get IMU velocity in the LCS
-        IMU_vel = cumtrapz(acc_stride_plus_LCS,time_stride_plus,initial=0,axis=0)
-        # Inital contidion: IMU velocity is zero at midstance
-        IMU_vel = IMU_vel-IMU_vel[MS_idx,:]
-        # Remove drift
-        slope = IMU_vel[-1,:]/(len(IMU_vel)-MS_idx-1)
-        drift = (slope*np.ones([len(IMU_vel),3]))*(np.array([range(len(IMU_vel)),range(len(theta)),range(len(IMU_vel))])).T
-        drift = drift-drift[MS_idx,:]
-        IMU_vel = IMU_vel-drift
-        # Integrate to get step length in the LCS
-        IMU_SL = np.trapz(IMU_vel[0:HS_idx,:],time_stride,axis=0)
-        run_speed.append(np.linalg.norm(IMU_SL)/(time_stride[-1]-time_stride[0])) 
-        
-    return run_speed
-
-def findRotToLab(accel_vec):
-    """
-    Function to find the rotation of the foot flat acceleration vector to the 
-    defined lab gravity coordinate system.
-
-    Parameters
-    ----------
-    accel_vec : numpy array
-        3x1 vector of the x,y,z acceleration at foot flat
-
-    Returns
-    -------
-    theta : numpy array
-        3x1 vector for the rotation from the foot flat acceleration to the lab
-        coordinate system
-
-    """
-    iGvec = accel_vec
-    iGvec = iGvec/np.linalg.norm(iGvec)
-    # Define the lab coordinate system gravity vector
-    lab_Gvec = np.array([1,0,0]).T
-    #______________________________________________________________________
-    # Compute the rotation matrix
-    C = np.cross(lab_Gvec,iGvec)
-    D = np.dot(lab_Gvec,iGvec)
-    Z = np.array([[0,-C[2],C[1]],[C[2],0,-C[0]],[-C[1],C[0],0]])
-    # Note: test the rotation matrix (R) that the norm of the colums and the rows is 1
-    R = np.eye(3)+Z+(Z@Z)*(1-D)/np.linalg.norm(C)**2
-    # Compute the rotation angles
-    theta = np.zeros(3) # Preallocate
-    theta[1] = arctan2(-R[2,0],np.sqrt(R[0,0]**2+R[1,0]**2))
-    # Conditional statement in case theta[1] is +/- 90 deg (pi/2 rad)
-    if theta[1] == np.pi/2:
-        theta[2] = 0
-        theta[0] = arctan2(R[0,1],R[1,1])
-    elif theta[1] == -np.pi/2:
-        theta[2] = 0
-        theta[0] = -arctan2(R[0,1],R[1,1])
-    else: 
-        theta[2] = arctan2(R[1,0]/cos(theta[1]),R[0,0]/cos(theta[1]))
-        theta[0] = arctan2(R[2,1]/cos(theta[1]),R[2,2]/cos(theta[1]))
-    theta = theta*180/np.pi
-    return theta
+    sig_out = np.array([sig.filtfilt(b, a, sig_in[:,jj]) for jj in range(3)]).T    
+    return(sig_out)
 
 
 # Grab the GPS data for the timing of segments
 GPStiming = pd.read_csv('C:\\Users\eric.honert\\Boa Technology Inc\\PFL Team - General\\Testing Segments\\EndurancePerformance\\TrailRun_2022\\CombinedGPS.csv')
 # Obtain IMU signals
 fPath = 'C:\\Users\\eric.honert\\Boa Technology Inc\\PFL Team - General\\Testing Segments\\EndurancePerformance\\TrailRun_2022\\IMUData\\'
+
+save_on = 2
 
 # Right High and Low G accelerometers: note that the gyro is in the low G file
 RHentries = [fName for fName in os.listdir(fPath) if fName.endswith('highg.csv') and fName.count('00218')]
@@ -331,17 +182,20 @@ LHentries = [fName for fName in os.listdir(fPath) if fName.endswith('highg.csv')
 LLentries = [fName for fName in os.listdir(fPath) if fName.endswith('lowg.csv') and fName.count('00880')]
 
 # 
-save_on = 2
-
-Subject = []
-Config = []
-Sesh = []
-
 oSubject = []
 oConfig = []
 oSesh = []
 oLabel = np.array([])
-oSpeed = np.array([])
+oSide = []
+
+pGyr = []
+pJerk = []
+rMLacc = []
+rIEgyro = []
+
+# Filtering frequencies
+acc_cut = 50
+gyr_cut = 30
 
 # Index through the GPS file as that has all entries possible
 for ii in range(116,len(GPStiming)):
@@ -359,8 +213,7 @@ for ii in range(116,len(GPStiming)):
         if GPSstr in entry:
             GoodL = 1
             Ltrial = jj
-    #__________________________________________________________________________
-    # Foot contact and trial start detection
+    
     # Conditional statement
     if GoodR*GoodL == 1:
         print(RLentries[Rtrial])
@@ -411,9 +264,8 @@ for ii in range(116,len(GPStiming)):
             
         L_start = LHS_t[HSidx_start[0]]; R_start = RHS_t[HSidx_start[1]]
         # Limit the foot contact events to those after the hops
-        LHS = LHS[HSidx_start[0]+1:-1]; LMS = LMS[HSidx_start[0]+1:-1]
-        RHS = RHS[HSidx_start[1]+1:-1]; RMS = RMS[HSidx_start[1]+1:-1]
-        LHS_t = Ltime[LHS]; RHS_t = Rtime[RHS]
+        LHS = LHS[HSidx_start[0]+1:-1]; LHS_t = Ltime[LHS]
+        RHS = RHS[HSidx_start[1]+1:-1]; RHS_t = Rtime[RHS]
         
     elif GoodR == 1:
         print(RLentries[Rtrial])
@@ -430,8 +282,7 @@ for ii in range(116,len(GPStiming)):
         [RHS,RMS] = estIMU_HS_MS(Racc,Rgyr,Rtime)
         # Generally, the first 3 detected HS are from hops (manually checked as well)
         R_start = Rtime[RHS[2]]
-        RHS = RHS[3:]; RMS = RMS[3:] 
-        RHS_t = Rtime[RHS]        
+        RHS = RHS[3:]; RHS_t = Rtime[RHS]        
   
     elif GoodL == 1:
         print(LLentries[Ltrial])
@@ -448,23 +299,28 @@ for ii in range(116,len(GPStiming)):
         [LHS,LMS] = estIMU_HS_MS(Lacc,Lgyr,Ltime)
         # Generally, the first 3 detected HS are from hops (manually checked as well)
         L_start = Ltime[LHS[2]]
-        LHS = LHS[3:]; LMS = LMS[3:]
-        LHS_t = Ltime[LHS]
+        LHS = LHS[3:]; LHS_t = Ltime[LHS]
         
     else:
         print('No Trial found')
-    #__________________________________________________________________________
-    # Deriving metrics
     
     if GoodR == 1:
         # Find good strides
         RGS = np.where((np.diff(RHS) > 0.5)*(np.diff(RHS_t) < 1.5))[0]
-        # IMU-based speed
-        Rspeed = computeRunSpeedIMU(Racc,Rgyr,RHS,RMS,RGS,Rtime)
-        RGS = RGS[0:-2]
+        # Filter the IMU signals
+        Racc = filtIMUsig(Racc,acc_cut,Rtime)
+        Rgyr = filtIMUsig(Rgyr,gyr_cut,Rtime)
+        # Compute stride metrics here
+        Rjerk = np.linalg.norm(np.array([np.gradient(Racc[:,jj],Rtime) for jj in range(3)]),axis=0)
+        for jj in RGS:
+            pJerk.append(np.max(Rjerk[RHS[jj]:RHS[jj+1]]))
+            pGyr.append(np.abs(np.min(Rgyr[RHS[jj]:RHS[jj+1],1])))
+            rMLacc.append(np.max(Racc[RHS[jj]:RHS[jj+1],1])-np.min(Racc[RHS[jj]:RHS[jj+1],1]))
+            appTO = round(0.2*(RHS[jj+1]-RHS[jj])+RHS[jj])
+            rIEgyro.append(np.max(Rgyr[RHS[jj]:appTO,2])-np.min(Rgyr[RHS[jj]:appTO,2]))
         
         # Create labels for saving data
-        Rlabel = np.array([0]*len(Rspeed))
+        Rlabel = np.array([0]*len(RGS))
         # Uphill label
         idx = RHS_t[RGS] < float(GPStiming.EndS1[ii]+R_start)
         Rlabel[idx] = 1
@@ -476,21 +332,29 @@ for ii in range(116,len(GPStiming)):
         Rlabel[idx] = 3
         
         # Appending
-        oSubject = oSubject + [GPStiming.Subject[ii]]*len(Rspeed)
-        oConfig = oConfig + [GPStiming.Config[ii]]*len(Rspeed)
-        oSesh = oSesh + [GPStiming.Sesh[ii]]*len(Rspeed)
+        oSubject = oSubject + [GPStiming.Subject[ii]]*len(RGS)
+        oConfig = oConfig + [GPStiming.Config[ii]]*len(RGS)
+        oSesh = oSesh + [GPStiming.Sesh[ii]]*len(RGS)
         oLabel = np.concatenate((oLabel,Rlabel),axis = None)
-        oSpeed = np.concatenate((oSpeed,Rspeed),axis = None)
+        oSide = oSide + ['R']*len(RGS)
     
     if GoodL == 1:
         # Define good strides
         LGS = np.where((np.diff(LHS) > 0.5)*(np.diff(LHS_t) < 1.5))[0]
-        # IMU-based speed
-        Lspeed = computeRunSpeedIMU(Lacc,Lgyr,LHS,LMS,LGS,Ltime)
-        LGS = LGS[0:-2]
+        # Filter the IMU signals
+        Lacc = filtIMUsig(Lacc,acc_cut,Ltime)
+        Lgyr = filtIMUsig(Lgyr,gyr_cut,Ltime)
+        # Compute stride metrics here
+        Ljerk = np.linalg.norm(np.array([np.gradient(Lacc[:,jj],Ltime) for jj in range(3)]),axis=0)
+        for jj in LGS:
+            pJerk.append(np.max(Ljerk[LHS[jj]:LHS[jj+1]]))
+            pGyr.append(np.abs(np.min(Lgyr[LHS[jj]:LHS[jj+1],1])))
+            rMLacc.append(np.max(Lacc[LHS[jj]:LHS[jj+1],1])-np.min(Lacc[LHS[jj]:LHS[jj+1],1]))
+            appTO = round(0.2*(LHS[jj+1]-LHS[jj])+LHS[jj])
+            rIEgyro.append(np.max(Lgyr[LHS[jj]:appTO,2])-np.min(Lgyr[LHS[jj]:appTO,2]))
   
         # Create labels for saving data
-        Llabel = np.array([0]*len(Lspeed))
+        Llabel = np.array([0]*len(LGS))
         # Uphill label
         idx = LHS_t[LGS] < float(GPStiming.EndS1[ii]+L_start)
         Llabel[idx] = 1
@@ -501,38 +365,36 @@ for ii in range(116,len(GPStiming)):
         idx = LHS_t[LGS] > float(GPStiming.StartS3[ii]+L_start)
         Llabel[idx] = 3
         
-        oSubject = oSubject + [GPStiming.Subject[ii]]*len(Lspeed)
-        oConfig = oConfig + [GPStiming.Config[ii]]*len(Lspeed)
-        oSesh = oSesh + [GPStiming.Sesh[ii]]*len(Lspeed)
+        oSubject = oSubject + [GPStiming.Subject[ii]]*len(LGS)
+        oConfig = oConfig + [GPStiming.Config[ii]]*len(LGS)
+        oSesh = oSesh + [GPStiming.Sesh[ii]]*len(LGS)
         oLabel = np.concatenate((oLabel,Llabel),axis = None)
-        oSpeed = np.concatenate((oSpeed,Lspeed),axis = None)
+        oSide = oSide + ['L']*len(LGS)
     
     # Clear variables
     LHS = []; RHS = []; LGS = []; RGS = []
-
+    
         
-outcomes = pd.DataFrame({'Subject':list(oSubject), 'Config': list(oConfig),'Sesh': list(oSesh),
-                         'Label':list(oLabel), 'Speed':list(oSpeed)})
+outcomes = pd.DataFrame({'Subject':list(oSubject), 'Side':list(oSide), 'Config': list(oConfig),'Sesh': list(oSesh),
+                          'Label':list(oLabel), 'pJerk':list(pJerk), 'pGyr':list(pGyr),'rMLacc':list(rMLacc),'rIEgyro':list(rIEgyro)})
 if save_on == 1:
-    outcomes.to_csv('C:\\Users\eric.honert\\Boa Technology Inc\\PFL Team - General\\Testing Segments\\EndurancePerformance\\TrailRun_2022\\IMUspeed.csv',header=True)
+    outcomes.to_csv('C:\\Users\eric.honert\\Boa Technology Inc\\PFL Team - General\\Testing Segments\\EndurancePerformance\\TrailRun_2022\\IMUmetrics.csv',header=True)
 elif save_on == 2:
-    outcomes.to_csv('C:\\Users\eric.honert\\Boa Technology Inc\\PFL Team - General\\Testing Segments\\EndurancePerformance\\TrailRun_2022\\IMUspeed.csv',mode = 'a',header=False)
+    outcomes.to_csv('C:\\Users\eric.honert\\Boa Technology Inc\\PFL Team - General\\Testing Segments\\EndurancePerformance\\TrailRun_2022\\IMUmetrics.csv',mode = 'a',header=False)
 
 
-plt.figure(2)
-plt.plot(Rtime,Racc[:,0])
-plt.plot(Ltime,Lacc[:,0])
-plt.legend(['Right','Left'])
-plt.plot(Rtime[RHS],Racc[RHS,0],'ko')
-plt.plot(Ltime[LHS],Lacc[LHS,0],'ro')
-plt.ylabel('Vertical Acceleration [m/s^2]')
-plt.xlabel('Trial Time [sec]')
-
-plt.figure(3)
-plt.plot(Rtime[RHS[RGS]],Rspeed)
-plt.plot(Ltime[LHS[LGS]],Lspeed)
-plt.ylabel('Running Speed [m/s]')
-plt.xlabel('Trial Time [sec]')
-plt.legend(['Right','Left'])
+# plt.figure(3)
+plt.subplot(2,1,1)
+plt.plot(Lacc[:,0])
+plt.plot(LHS,Lacc[LHS,0],'ro')
+plt.subplot(2,1,2)
+plt.plot(Racc[:,0])
+plt.plot(RHS,Racc[RHS,0],'ko')
+# plt.figure(3)
+# plt.plot(Rtime[RHS[RGS[0:-2]]],Rspeed)
+# plt.plot(Ltime[LHS[LGS[0:-2]]],Lspeed)
+# plt.ylabel('Running Speed [m/s]')
+# plt.xlabel('Time in Trial [sec]')
+# plt.legend(['Right','Left'])
     
 
