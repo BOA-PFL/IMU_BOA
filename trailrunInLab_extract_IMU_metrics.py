@@ -346,6 +346,7 @@ pGyr = []
 pJerk = []
 rMLacc = []
 rIEgyro = []
+pIEgyro = []
 imuSpeed = []
 
 # Filtering frequencies
@@ -436,6 +437,7 @@ for ii in range(96,len(Lentries)):
         rMLacc.append(np.max(iacc[iHS[jj]:iHS[jj+1],1])-np.min(iacc[iHS[jj]:iHS[jj+1],1]))
         appTO = round(0.2*(iHS[jj+1]-iHS[jj])+iHS[jj])
         rIEgyro.append(np.max(igyr[iHS[jj]:appTO,2])-np.min(igyr[iHS[jj]:appTO,2]))
+        pIEgyro.append(np.max(igyr[iHS[jj]:appTO,2]))
         
     # Appending
     oSubject = oSubject + [Subject]*len(iGS)
@@ -449,7 +451,7 @@ for ii in range(96,len(Lentries)):
     
         
 outcomes = pd.DataFrame({'Subject':list(oSubject), 'Config': list(oConfig),'Label':list(oLabel), 'Speed':list(oSpeed), 'Sesh': list(oSesh),
-                          'pJerk':list(pJerk), 'pGyr':list(pGyr),'rMLacc':list(rMLacc),'rIEgyro':list(rIEgyro),'imuSpeed':list(imuSpeed)})
+                          'pJerk':list(pJerk), 'pGyr':list(pGyr),'rMLacc':list(rMLacc),'rIEgyro':list(rIEgyro),'pIEgyro':list(pIEgyro),'imuSpeed':list(imuSpeed)})
 if save_on == 1:
     outcomes.to_csv('C:\\Users\eric.honert\\Boa Technology Inc\\PFL Team - General\\Testing Segments\\EndurancePerformance\\TrailRun_2022\\InLabIMUmetrics.csv',header=True)
 elif save_on == 2:
