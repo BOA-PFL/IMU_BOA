@@ -349,6 +349,7 @@ setting = []
 oSide = []
 
 pGyr = []
+pAcc = []
 pJerk = []
 rMLacc = []
 rIEgyro = []
@@ -425,8 +426,10 @@ for ii in range(2,len(Lentries)):
     igyr = filtIMUsig(igyr,gyr_cut,IMUtime)
     # Compute stride metrics here
     jerk = np.linalg.norm(np.array([np.gradient(iacc[:,jj],IMUtime) for jj in range(3)]),axis=0)
+    AccMag = np.linalg.norm(iacc,axis=1)
     for jj in iGS:
         pJerk.append(np.max(jerk[iHS[jj]:iHS[jj+1]]))
+        pAcc.append(np.max(AccMag[iHS[jj]:iHS[jj+1]]))
         pGyr.append(np.abs(np.min(igyr[iHS[jj]:iHS[jj+1],1])))
         rMLacc.append(np.max(iacc[iHS[jj]:iHS[jj+1],1])-np.min(iacc[iHS[jj]:iHS[jj+1],1]))
         appTO = round(0.2*(iHS[jj+1]-iHS[jj])+iHS[jj])
@@ -445,12 +448,12 @@ for ii in range(2,len(Lentries)):
     # Clear variables
     iHS = []; iGS = []
     
-        
-# outcomes = pd.DataFrame({'Subject':list(oSubject), 'Side':list(oSide), 'Config': list(oConfig),'Sesh': list(oSesh),
-                          # 'Label':list(oLabel),'Setting':list(setting), 'pJerk':list(pJerk), 'pGyr':list(pGyr),
-                          # 'rMLacc':list(rMLacc),'rIEgyro':list(rIEgyro),'imuSpeed':list(imuSpeed)})
+outcomes = pd.DataFrame({'Subject':list(oSubject), 'Config': list(oConfig), 'Movement':list(oLabel),
+                         'Sesh': list(oSesh), 'pJerk':list(pJerk),'pAcc':list(pAcc), 'pGyr':list(pGyr),
+                           'rMLacc':list(rMLacc),'rIEgyro':list(rIEgyro),'imuSpeed':list(imuSpeed)})
 
-# if save_on == 1:
-#     outcomes.to_csv('C:\\Users\eric.honert\\Boa Technology Inc\\PFL Team - General\\Testing Segments\\EndurancePerformance\\TrailRun_2022\\CompIMUmetrics.csv',mode = 'a',header=False)
+
+if save_on == 1:
+    outcomes.to_csv('C:\\Users\eric.honert\\Boa Technology Inc\\PFL Team - General\\Testing Segments\\EndurancePerformance\\TrailRun_2022\\CompIMUmetrics.csv',mode = 'a',header=False)
 
 
