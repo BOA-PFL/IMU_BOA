@@ -327,7 +327,7 @@ def filtIMUsig(sig_in,cut,t):
 
 
 # Obtain IMU signals
-fPath = 'C:\\Users\\eric.honert\\Boa Technology Inc\\PFL Team - General\\Testing Segments\\EndurancePerformance\\TrailRun_2022\\InLabData\\IMUData\\'
+fPath = 'C:\\Users\\eric.honert\\Boa Technology Inc\\PFL Team - General\\Testing Segments\\EndurancePerformance\\TrailRun_2022\\InLabData\\IMU\\'
 
 save_on = 2
 
@@ -354,7 +354,7 @@ acc_cut = 50
 gyr_cut = 30
 
 # Index through the low-g files
-for ii in range(96,len(Lentries)):
+for ii in range(119,len(Lentries)):
     print(Lentries[ii])
     # Load the trials here
     Ldf = pd.read_csv(fPath + Lentries[ii],sep=',', header = 0)
@@ -385,42 +385,36 @@ for ii in range(96,len(Lentries)):
     approx_CT = np.diff(iHS)
     iHS_t = IMUtime[iHS]
     
-    # Trial 40 started late:
-    if Lentries[ii] == 'IS02-pfs-ps-p4-1_TS-00218_2022-07-19-15-03-21_lowg.csv':
-        idx = (iHS_t > 10)*(iHS_t < 55)
-        iHS = iHS[idx]
-        iHS_t = iHS_t[idx]
-        iMS = iMS[idx]
-    else: 
-        # Counters
-        jc = 0  # jump counter
-        stc = 0 # start trial counter
-        jj = 0
-        up_thresh = 5e8
+    # Counters
+    jc = 0  # jump counter
+    stc = 0 # start trial counter
+    jj = 0
+    up_thresh = 5e8
+    
+    while stc == 0:
+        if approx_CT[jj] < 1500:
+            jc = jc+1
+        if jc >= 2 and approx_CT[jj] > 2000:
+            idx = (iHS_t > (iHS_t[jj] + 10))*(iHS_t < (iHS_t[jj] + 55))
+            iHS = iHS[idx]
+            iHS_t = iHS_t[idx]
+            iMS = iMS[idx]
+            stc = 1
         
-        while stc == 0:
-            if approx_CT[jj] < 1500:
-                jc = jc+1
-            if jc >= 2 and approx_CT[jj] > 2000:
-                idx = (iHS_t > (iHS_t[jj] + 10))*(iHS_t < (iHS_t[jj] + 55))
-                iHS = iHS[idx]
-                iHS_t = iHS_t[idx]
-                iMS = iMS[idx]
-                stc = 1
-            
-            jj = jj+1
-            
-            if jj > 10:
-                up_thresh = up_thresh - 2e8
-                [iHS,iMS] = estIMU_HS_MS(iacc,igyr,IMUtime,up_thresh)
-                approx_CT = np.diff(iHS)
-                iHS_t = IMUtime[iHS]
-                jj = 0
+        jj = jj+1
+        
+        if jj > 10:
+            up_thresh = up_thresh - 2e8
+            [iHS,iMS] = estIMU_HS_MS(iacc,igyr,IMUtime,up_thresh)
+            approx_CT = np.diff(iHS)
+            iHS_t = IMUtime[iHS]
+            jj = 0
         
     
-    plt.figure(ii)
-    plt.plot(iacc[:,0])
-    plt.plot(iHS,iacc[iHS,0],'ko')
+    # plt.figure(ii)
+    # plt.plot(iacc[:,0])
+    # plt.plot(iHS,iacc[iHS,0],'ko')
+    # plt.close()
     
     iGS = np.where((np.diff(iHS_t) > 0.5)*(np.diff(iHS_t) < 1.5))[0]
     # Compute IMU running speed
@@ -437,7 +431,13 @@ for ii in range(96,len(Lentries)):
         rMLacc.append(np.max(iacc[iHS[jj]:iHS[jj+1],1])-np.min(iacc[iHS[jj]:iHS[jj+1],1]))
         appTO = round(0.2*(iHS[jj+1]-iHS[jj])+iHS[jj])
         rIEgyro.append(np.max(igyr[iHS[jj]:appTO,2])-np.min(igyr[iHS[jj]:appTO,2]))
-        pIEgyro.append(np.max(igyr[iHS[jj]:appTO,2]))
+        
+        if Slope == 'n6':
+            # The IMU is on the left foot
+            pIEgyro.append(np.max(igyr[iHS[jj]:appTO,2]))
+        else: 
+            # The IMU is on the right foot
+            pIEgyro.append(np.abs(np.min(igyr[iHS[jj]:appTO,2])))
         
     # Appending
     oSubject = oSubject + [Subject]*len(iGS)
