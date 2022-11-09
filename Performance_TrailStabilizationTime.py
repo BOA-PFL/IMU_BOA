@@ -15,6 +15,7 @@ import scipy.signal as sig
 import matplotlib.pyplot as plt
 import os
 import addcopyfighandler
+from tkinter import messagebox
 
 # Functions
 def align_fuse_extract_IMU(LGdat,HGdat):
@@ -136,6 +137,24 @@ def estIMU_singleleg_landings(acc,t,HS_thresh):
     return HS
 
 def filtIMUsig(sig_in,cut,t):
+    """
+    Filter nx3 IMU signals
+
+    Parameters
+    ----------
+    sig_in : numpy array (Nx3)
+        Signal with x,y,z components
+    cut : float
+        cut-off frequency
+    t : numpy array or list
+        time array
+
+    Returns
+    -------
+    sig_out : numpy array
+        Filtered signal
+
+    """
     # Set up a 2nd order 50 Hz low pass buttworth filter
     freq = 1/np.mean(np.diff(t))
     w = cut / (freq / 2) # Normalize the frequency
@@ -149,7 +168,7 @@ def filtIMUsig(sig_in,cut,t):
 fPath = 'C:\\Users\\eric.honert\\Boa Technology Inc\\PFL Team - General\\Testing Segments\\Hike\\FocusAnkleDualDial_Midcut_Sept2022\\IMU\\'
 
 save_on = 0
-debug = 0
+debug = 1
 
 # High and Low G accelerometers: note that the gyro is in the low G file
 Hentries = [fName for fName in os.listdir(fPath) if fName.endswith('_highg.csv') and fName.count('and') or fName.endswith('_highg.csv') and fName.count('SLTrail')]
@@ -160,6 +179,7 @@ oSubject = []
 oConfig = []
 
 stabalize_time = []
+badFileList = []
 
 # Filtering frequencies
 gyr_cut = 5
@@ -205,7 +225,8 @@ for ii in range(0,len(Lentries)):
     #__________________________________________________________________________
     # Identify stabilization time
     loc_stabalize = []  # Debugging purposes
-    loc_stabalize2 = []
+    good_land = []
+    
     
     # Require 0.5 second for stabalization
     for land in landings:
@@ -218,36 +239,52 @@ for ii in range(0,len(Lentries)):
                 instable_idx = np.where(tf_steady == True)[0]
                 start_examine = start_examine + instable_idx[-1] + 1
             else:
-                stabalize_time.append(IMUtime[start_examine]-IMUtime[land])
-                oSubject.append(Subject)
-                oConfig.append(Config)
-                
+                good_land.append(land)
                 loc_stabalize.append(start_examine)
                 land_det = 1
-    #__________________________________________________________________________
-    # Alternative method for identifying landing stabalization time
-    # Require to be below the threshold & have the 0.5 sec integral be below 5%
-    for land in landings:
-        # Examine 4 seconds after the landing (about 4500 frames)
-        poss_stab_tf = igyr_mag[land:land + 4500] < steady_thresh
-        poss_stab_idx = np.where(poss_stab_tf == True)[0] + land
-        land_det = 0
-        jj = 0        
-        while land_det == 0 and jj < len(poss_stab_idx):
-            if sum(igyr_mag[poss_stab_idx[jj]:poss_stab_idx[jj]+round(0.5*freq)]) < round(0.5*freq)*steady_thresh:
-                loc_stabalize2.append(poss_stab_idx[jj])
-                land_det = 1
-            else:
-                jj = jj+1
-    #__________________________________________________________________________
     
+    # Debugging: Creation of dialog box for looking where foot contact are accurate
+    answer = True # Defaulting to true: In case "debug" is not used
     if debug == 1:
         plt.figure(ii)
         plt.plot(IMUtime,igyr_mag)
         plt.plot(IMUtime[landings],igyr_mag[landings],'ko')
         plt.plot(IMUtime[loc_stabalize],igyr_mag[loc_stabalize],'mv')
-        plt.plot(IMUtime[loc_stabalize2],igyr_mag[loc_stabalize2],'bs')
+        plt.xlabel('Time [sec]')
+        answer = messagebox.askyesno("Question","Is data clean?")
         plt.close()
+        if answer == False:
+            print('Adding file to bad file list')
+            badFileList.append(Lentries[ii])
+    
+    if answer == True:
+        for count, land in enumerate(good_land):
+            stabalize_time.append(IMUtime[loc_stabalize[count]]-IMUtime[land])
+            oSubject.append(Subject)
+            oConfig.append(Config)
+    
+    
+    
+    
+    #__________________________________________________________________________
+    # Alternative method for identifying landing stabalization time
+    # Require to be below the threshold & have the 0.5 sec integral be below 5%
+    # loc_stabalize2 = [] # second means of determining stabilization time
+    # for land in landings:
+    #     # Examine 4 seconds after the landing (about 4500 frames)
+    #     poss_stab_tf = igyr_mag[land:land + 4500] < steady_thresh
+    #     poss_stab_idx = np.where(poss_stab_tf == True)[0] + land
+    #     land_det = 0
+    #     jj = 0        
+    #     while land_det == 0 and jj < len(poss_stab_idx):
+    #         if sum(igyr_mag[poss_stab_idx[jj]:poss_stab_idx[jj]+round(0.5*freq)]) < round(0.5*freq)*steady_thresh:
+    #             loc_stabalize2.append(poss_stab_idx[jj])
+    #             land_det = 1
+    #         else:
+    #             jj = jj+1
+    #__________________________________________________________________________
+
+        
     
 
 outcomes = pd.DataFrame({'Subject':list(oSubject), 'Config': list(oConfig),
