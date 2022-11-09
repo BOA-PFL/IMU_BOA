@@ -354,7 +354,7 @@ acc_cut = 50
 gyr_cut = 30
 
 # Index through the low-g files
-for ii in range(119,len(Lentries)):
+for ii in range(179,len(Lentries)):
     print(Lentries[ii])
     # Load the trials here
     Ldf = pd.read_csv(fPath + Lentries[ii],sep=',', header = 0)
