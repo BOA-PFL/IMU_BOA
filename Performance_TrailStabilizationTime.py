@@ -205,6 +205,7 @@ for ii in range(0,len(Lentries)):
     #__________________________________________________________________________
     # Identify stabilization time
     loc_stabalize = []  # Debugging purposes
+    loc_stabalize2 = []
     
     # Require 0.5 second for stabalization
     for land in landings:
@@ -226,25 +227,26 @@ for ii in range(0,len(Lentries)):
     #__________________________________________________________________________
     # Alternative method for identifying landing stabalization time
     # Require to be below the threshold & have the 0.5 sec integral be below 5%
-    # for land in landings:
-    #     # Examine 4 seconds after the landing (about 4500 frames)
-    #     poss_stab_tf = igyr_mag[land:land + 4500] < steady_thresh
-    #     poss_stab_idx = np.where(poss_stab_tf == True)[0] + land
-    #     land_det = 0
-    #     jj = 0        
-    #     while land_det == 0 and jj < len(poss_stab_idx):
-    #         if sum(igyr_mag[poss_stab_idx[jj]:poss_stab_idx[jj]+round(0.5*freq)]) < round(0.5*freq)*steady_thresh:
-    #             stabalize.append(poss_stab_idx[jj])
-    #             land_det = 1
-    #         else:
-    #             jj = jj+1
+    for land in landings:
+        # Examine 4 seconds after the landing (about 4500 frames)
+        poss_stab_tf = igyr_mag[land:land + 4500] < steady_thresh
+        poss_stab_idx = np.where(poss_stab_tf == True)[0] + land
+        land_det = 0
+        jj = 0        
+        while land_det == 0 and jj < len(poss_stab_idx):
+            if sum(igyr_mag[poss_stab_idx[jj]:poss_stab_idx[jj]+round(0.5*freq)]) < round(0.5*freq)*steady_thresh:
+                loc_stabalize2.append(poss_stab_idx[jj])
+                land_det = 1
+            else:
+                jj = jj+1
     #__________________________________________________________________________
     
     if debug == 1:
         plt.figure(ii)
-        plt.plot(igyr_mag)
-        plt.plot(landings,igyr_mag[landings],'ko')
-        plt.plot(loc_stabalize,igyr_mag[loc_stabalize],'mv')
+        plt.plot(IMUtime,igyr_mag)
+        plt.plot(IMUtime[landings],igyr_mag[landings],'ko')
+        plt.plot(IMUtime[loc_stabalize],igyr_mag[loc_stabalize],'mv')
+        plt.plot(IMUtime[loc_stabalize2],igyr_mag[loc_stabalize2],'bs')
         plt.close()
     
 

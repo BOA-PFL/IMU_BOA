@@ -20,6 +20,7 @@ import matplotlib.pyplot as plt
 import os
 import time
 import addcopyfighandler
+from tkinter import messagebox
 
 # Functions
 def align_fuse_extract_IMU(LGdat,HGdat):
@@ -331,13 +332,14 @@ def filtIMUsig(sig_in,cut,t):
 
 
 # Obtain IMU signals
-fPath = 'C:\\Users\\eric.honert\\Boa Technology Inc\\PFL Team - General\\Testing Segments\\EndurancePerformance\\Hike_DualDialMechanistic_Aug22\\Pilot\\IMUdata\\'
+fPath = 'C:\\Users\\eric.honert\\Boa Technology Inc\\PFL Team - General\\Testing Segments\\Hike\\FocusAnkleDualDial_Midcut_Sept2022\\IMU\\'
 
 save_on = 0
+debug = 1
 
 # High and Low G accelerometers: note that the gyro is in the low G file
-Hentries = [fName for fName in os.listdir(fPath) if fName.endswith('highg.csv')]
-Lentries = [fName for fName in os.listdir(fPath) if fName.endswith('lowg.csv')]
+Hentries = [fName for fName in os.listdir(fPath) if fName.endswith('highg.csv') and fName.count('-Trail_')]
+Lentries = [fName for fName in os.listdir(fPath) if fName.endswith('lowg.csv') and fName.count('-Trail_')]
 
 # 
 oSubject = []
@@ -355,12 +357,14 @@ rMLacc = []
 rIEgyro = []
 imuSpeed = []
 
+badFileList = []
+
 # Filtering frequencies
 acc_cut = 50
 gyr_cut = 30
 
 # Index through the low-g files
-for ii in range(2,len(Lentries)):
+for ii in range(0,len(Lentries)):
     print(Lentries[ii])
     # Load the trials here
     Ldf = pd.read_csv(fPath + Lentries[ii],sep=',', header = 0)
@@ -378,7 +382,7 @@ for ii in range(2,len(Lentries)):
     # Convert the time
     IMUtime = (IMUtime - IMUtime[0])*(1e-6)        
     # Identify foot contact & midstance
-    [iHS,iMS] = estIMU_HS_MS(iacc,igyr,IMUtime,8e8)
+    [iHS,iMS] = estIMU_HS_MS(iacc,igyr,IMUtime,1e8)
     
     # Examine where the start of the trial is by the 3 jumps
     # There should seem to be 2 "short" strides followed by a pause
@@ -392,59 +396,75 @@ for ii in range(2,len(Lentries)):
     up_thresh = 8e8
     
     
-    # Algorithm to detect 3 hops - will need to be updated
-    # while stc == 0:
-    #     if approx_CT[jj] < 1500:
-    #         jc = jc+1
-    #     if jc >= 2 and approx_CT[jj] > 2000:
-    #         idx = (iHS_t > (iHS_t[jj] + 10))*(iHS_t < (iHS_t[jj] + 55))
-    #         iHS = iHS[idx]
-    #         iHS_t = iHS_t[idx]
-    #         iMS = iMS[idx]
-    #         stc = 1
+    # Algorithm to detect 3 hops - may need to be updated
+    while stc == 0:
+        if approx_CT[jj] < 1500:
+            jc = jc+1
+        if jc >= 2 and approx_CT[jj] > 2000:
+            idx = (iHS_t > (iHS_t[jj] + 5))
+            iHS = iHS[idx]
+            iHS_t = iHS_t[idx]
+            iMS = iMS[idx]
+            stc = 1
         
-    #     jj = jj+1
+        jj = jj+1
         
-    #     if jj > 10:
-    #         up_thresh = up_thresh - 2e8
-    #         [iHS,iMS] = estIMU_HS_MS(iacc,igyr,IMUtime,up_thresh)
-    #         approx_CT = np.diff(iHS)
-    #         iHS_t = IMUtime[iHS]
-    #         jj = 0
+        if jj > 10:
+            up_thresh = up_thresh - 2e8
+            [iHS,iMS] = estIMU_HS_MS(iacc,igyr,IMUtime,up_thresh)
+            approx_CT = np.diff(iHS)
+            iHS_t = IMUtime[iHS]
+            jj = 0
         
     
-    plt.figure(ii)
-    plt.plot(iacc[:,0])
-    plt.plot(iHS,iacc[iHS,0],'ko')
-    
+    # Exclusion criteria for good strides: Based on step length
     iGS = np.where((np.diff(iHS_t) > 0.5)*(np.diff(iHS_t) < 1.5))[0]
-    # Compute IMU running speed
-    imuSpeed = np.concatenate((imuSpeed,computeRunSpeedIMU(iacc,igyr,iHS,iMS,iGS,IMUtime)),axis = None)
     
-    # Filter the IMU signals
-    iacc = filtIMUsig(iacc,acc_cut,IMUtime)
-    igyr = filtIMUsig(igyr,gyr_cut,IMUtime)
-    # Compute stride metrics here
-    jerk = np.linalg.norm(np.array([np.gradient(iacc[:,jj],IMUtime) for jj in range(3)]),axis=0)
-    AccMag = np.linalg.norm(iacc,axis=1)
-    for jj in iGS:
-        pJerk.append(np.max(jerk[iHS[jj]:iHS[jj+1]]))
-        pAcc.append(np.max(AccMag[iHS[jj]:iHS[jj+1]]))
-        pGyr.append(np.abs(np.min(igyr[iHS[jj]:iHS[jj+1],1])))
-        rMLacc.append(np.max(iacc[iHS[jj]:iHS[jj+1],1])-np.min(iacc[iHS[jj]:iHS[jj+1],1]))
-        appTO = round(0.2*(iHS[jj+1]-iHS[jj])+iHS[jj])
-        rIEgyro.append(np.max(igyr[iHS[jj]:appTO,2])-np.min(igyr[iHS[jj]:appTO,2]))
+    # Debugging: Creation of dialog box for looking where foot contact are accurate
+    answer = True # Defaulting to true: In case "debug" is not used
+    if debug == 1:
+        plt.plot(IMUtime,iacc[:,0])
+        plt.plot(iHS_t,iacc[iHS,0],'ro')
+        plt.plot(iHS_t[iGS],iacc[iHS[iGS],0],'ko')
+        plt.ylabel('Vertical Acceleration [m/s^2]')
+        plt.xlabel('Time [sec]')
+        answer = messagebox.askyesno("Question","Is data clean?")
+        plt.close('all')
+    
+        if answer == False:
+            plt.close('all')
+            print('Adding file to bad file list')
+            badFileList.append(Lentries[ii])
         
-    # Appending
-    # oSubject = oSubject + [Subject]*len(iGS)
-    # oConfig = oConfig + [Config]*len(iGS)
-    # oLabel = oLabel + [Label]*len(iGS)
-    # setting = setting + ['0']*len(iGS)
-    # oSesh = oSesh + [Sesh]*len(iGS)
-    # if Slope[0] == 'n':
-    #     oSide = oSide + ['L']*len(iGS)
-    # else: 
-    #     oSide = oSide + ['R']*len(iGS)
+    if answer == True:
+        print('Estimating point estimates')
+        # Compute IMU running speed
+        imuSpeed = np.concatenate((imuSpeed,computeRunSpeedIMU(iacc,igyr,iHS,iMS,iGS,IMUtime)),axis = None)
+        # Filter the IMU signals
+        iacc = filtIMUsig(iacc,acc_cut,IMUtime)
+        igyr = filtIMUsig(igyr,gyr_cut,IMUtime)
+        # Compute stride metrics here
+        jerk = np.linalg.norm(np.array([np.gradient(iacc[:,jj],IMUtime) for jj in range(3)]),axis=0)
+        AccMag = np.linalg.norm(iacc,axis=1)
+        for jj in iGS:
+            pJerk.append(np.max(jerk[iHS[jj]:iHS[jj+1]]))
+            pAcc.append(np.max(AccMag[iHS[jj]:iHS[jj+1]]))
+            pGyr.append(np.abs(np.min(igyr[iHS[jj]:iHS[jj+1],1])))
+            rMLacc.append(np.max(iacc[iHS[jj]:iHS[jj+1],1])-np.min(iacc[iHS[jj]:iHS[jj+1],1]))
+            appTO = round(0.2*(iHS[jj+1]-iHS[jj])+iHS[jj])
+            rIEgyro.append(np.max(igyr[iHS[jj]:appTO,2])-np.min(igyr[iHS[jj]:appTO,2]))
+            
+        # Appending
+        # oSubject = oSubject + [Subject]*len(iGS)
+        # oConfig = oConfig + [Config]*len(iGS)
+        # oLabel = oLabel + [Label]*len(iGS)
+        # setting = setting + ['0']*len(iGS)
+        # oSesh = oSesh + [Sesh]*len(iGS)
+        # if Slope[0] == 'n':
+        #     oSide = oSide + ['L']*len(iGS)
+        # else: 
+        #     oSide = oSide + ['R']*len(iGS)
+    
     # Clear variables
     iHS = []; iGS = []
     
