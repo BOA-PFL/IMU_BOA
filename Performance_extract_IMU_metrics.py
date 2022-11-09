@@ -432,7 +432,6 @@ for ii in range(0,len(Lentries)):
         plt.close('all')
     
         if answer == False:
-            plt.close('all')
             print('Adding file to bad file list')
             badFileList.append(Lentries[ii])
         
