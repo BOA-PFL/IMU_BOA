@@ -82,10 +82,10 @@ def align_fuse_extract_IMU(LGdat,HGdat):
         resamp_HG = resamp_HG[:-lag,:]
         
     elif lag < 0:
-        LGtime = LGtime[:-lag]
-        gyr = gyr[:-lag,:]
-        acc_lg = acc_lg[:-lag,:]
-        resamp_HG = resamp_HG[lag:,:]
+        LGtime = LGtime[:lag]
+        gyr = gyr[:lag,:]
+        acc_lg = acc_lg[:lag,:]
+        resamp_HG = resamp_HG[-lag:,:]
     
     acc = acc_lg
     
@@ -269,19 +269,19 @@ for ii in range(0,len(Lentries)):
     #__________________________________________________________________________
     # Alternative method for identifying landing stabalization time
     # Require to be below the threshold & have the 0.5 sec integral be below 5%
-    # loc_stabalize2 = [] # second means of determining stabilization time
-    # for land in landings:
-    #     # Examine 4 seconds after the landing (about 4500 frames)
-    #     poss_stab_tf = igyr_mag[land:land + 4500] < steady_thresh
-    #     poss_stab_idx = np.where(poss_stab_tf == True)[0] + land
-    #     land_det = 0
-    #     jj = 0        
-    #     while land_det == 0 and jj < len(poss_stab_idx):
-    #         if sum(igyr_mag[poss_stab_idx[jj]:poss_stab_idx[jj]+round(0.5*freq)]) < round(0.5*freq)*steady_thresh:
-    #             loc_stabalize2.append(poss_stab_idx[jj])
-    #             land_det = 1
-    #         else:
-    #             jj = jj+1
+    loc_stabalize2 = [] # second means of determining stabilization time
+    for land in landings:
+        # Examine 4 seconds after the landing (about 4500 frames)
+        poss_stab_tf = igyr_mag[land:land + 4500] < steady_thresh
+        poss_stab_idx = np.where(poss_stab_tf == True)[0] + land
+        land_det = 0
+        jj = 0        
+        while land_det == 0 and jj < len(poss_stab_idx):
+            if sum(igyr_mag[poss_stab_idx[jj]:poss_stab_idx[jj]+round(0.5*freq)]) < round(0.5*freq)*steady_thresh:
+                loc_stabalize2.append(poss_stab_idx[jj])
+                land_det = 1
+            else:
+                jj = jj+1
     #__________________________________________________________________________
 
         
