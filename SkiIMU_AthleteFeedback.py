@@ -1,8 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-Created on Mon Nov 21 17:04:52 2022
-
-Code to examine angles provided by vicon IMUs
+Created on Fri Jan  6 14:26:37 2023
 
 @author: Eric.Honert
 """
@@ -20,9 +18,8 @@ import os
 import time
 import addcopyfighandler
 from tkinter import messagebox
+from tkinter.filedialog import askopenfilenames
 
-# Obtain IMU signals
-fPath = 'C:\\Users\\eric.honert\\Boa Technology Inc\\PFL Team - General\\Testing Segments\\Snow Performance\\SkiValidation_Dec2022\\IMU\\'
 
 # Functions
 def align_fuse_extract_IMU_angles(LGdat,HGdat):
@@ -119,6 +116,23 @@ def filtIMUsig(sig_in,cut,t):
     return(sig_out)
 
 def findEdgeAng_gyr(gyr_roll,t,turn_idx):
+    """
+    Find the edging (roll) angle from the gyroscope
+
+    Parameters
+    ----------
+    gyr_roll : numpy array
+        z-component of the gyroscope.
+    t : TYPE
+        DESCRIPTION.
+    turn_idx : TYPE
+        DESCRIPTION.
+
+    Returns
+    -------
+    None.
+
+    """
     
     edgeang_dwn = []
     edgeang_up = []
@@ -135,7 +149,6 @@ def findEdgeAng_gyr(gyr_roll,t,turn_idx):
     return(edgeang_dwn,edgeang_up)
 
 
-acc_cut = 10
 gyr_cut = 6
 
 # Debugging variables
@@ -148,10 +161,14 @@ en_idx = []
 trial_name = []
 
 # Biomechanical outcomes
-edgeang_dwn_gyr = []
-edgeang_up_gyr = []
-Side = []
-TurnTime = []
+edgeang_dwn_gyrL = []
+edgeang_dwn_gyrR = []
+
+print('Select ALL files for a subject')
+filename = askopenfilenames() # Open .csv files
+
+# This file path will need to change!
+fPath = os.path.dirname(filename[0]) + '/'
 
 # Load in the trial segmentation variable if it is in the directory
 if os.path.exists(fPath+'TrialSeg.npy') == True:
@@ -161,15 +178,15 @@ if os.path.exists(fPath+'TrialSeg.npy') == True:
     en_idx = np.ndarray.tolist(trial_segment_old[2,:])
     
 # High and Low G accelerometers: note that the gyro is in the low G file
-Hentries = [fName for fName in os.listdir(fPath) if fName.endswith('highg.csv')]
-Lentries = [fName for fName in os.listdir(fPath) if fName.endswith('lowg.csv')]
-
+Hentries = [fName for fName in filename if fName.endswith('highg.csv')]
+Lentries = [fName for fName in filename if fName.endswith('lowg.csv')]
 
 for ii in range(0,len(Lentries)):
     # Grab the .csv files
-    print(Lentries[ii])
-    Ldf = pd.read_csv(fPath + Lentries[ii],sep=',', header = 0)
-    Hdf = pd.read_csv(fPath + Hentries[ii],sep=',', header = 0)
+    tmpFile = Lentries[ii].split(sep = "/")[-1]
+    print(tmpFile)
+    Ldf = pd.read_csv(Lentries[ii],sep=',', header = 0)
+    Hdf = pd.read_csv(Hentries[ii],sep=',', header = 0)
     
     # Combine the IMU data
     [IMUtime,iacc,igyr,iang] = align_fuse_extract_IMU_angles(Ldf,Hdf)
@@ -186,11 +203,10 @@ for ii in range(0,len(Lentries)):
     
     #__________________________________________________________________________
     # Trial Segmentation
-    if Lentries[ii] in trial_name:
+    if tmpFile in trial_name:
         # If the trial was previously segmented, grab the appropriate start/end points
-        idx = trial_name.index(Lentries[ii])
+        idx = trial_name.index(tmpFile)
         tmp_st = int(st_idx[idx]); tmp_en = int(en_idx[idx]);
-        print('success')
     else:
         # If new trial, us UI to segment the trial
         fig, ax = plt.subplots()
@@ -202,7 +218,7 @@ for ii in range(0,len(Lentries)):
         tmp_st = round(pts[0,0]); tmp_en = round(pts[1,0])
         st_idx.append(tmp_st)
         en_idx.append(tmp_en)
-        trial_name.append(Lentries[ii])
+        trial_name.append(tmpFile)
     #__________________________________________________________________________
     # Use only the data from the pre-selected region
     IMUtime = IMUtime[tmp_st:tmp_en]; iang = iang[tmp_st:tmp_en,:]
@@ -229,18 +245,18 @@ for ii in range(0,len(Lentries)):
         #______________________________________________________________________
         # Find the edge angles from the gyroscope
         igyr = filtIMUsig(igyr,gyr_cut,IMUtime)
-        tmp_edge_dwn,tmp_edge_up = findEdgeAng_gyr(igyr[:,2],IMUtime,ipeaks)
-        edgeang_dwn_gyr.extend(tmp_edge_dwn)
-        edgeang_up_gyr.extend(tmp_edge_up)
+        tmp_edge_dwn,_ = findEdgeAng_gyr(igyr[:,2],IMUtime,ipeaks)
         if Lentries[ii].count('03399'):
-            Side = Side + ['R']*len(tmp_edge_dwn)
+            edgeang_dwn_gyrR.extend(tmp_edge_dwn)
         else:
-            Side = Side + ['L']*len(tmp_edge_dwn)
+            edgeang_dwn_gyrL.extend(tmp_edge_dwn)
 
 # Save the trial segmentation
 trial_segment = np.array([trial_name,st_idx,en_idx])
-np.save(fPath+'TrialSeg.npy',trial_segment)    
-    
+np.save(fPath+'TrialSeg.npy',trial_segment)
 
-
-
+# Feedback for the athletes
+L_avgedge = np.mean(edgeang_dwn_gyrL)
+R_avgedge = np.mean(edgeang_dwn_gyrR)
+print('Average Edge Angle: ', round(np.mean(edgeang_dwn_gyrL + edgeang_dwn_gyrR)))
+print('Edge Angle Difference: ', round(L_avgedge-R_avgedge))   
