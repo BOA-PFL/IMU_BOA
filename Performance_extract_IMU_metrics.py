@@ -87,10 +87,10 @@ def align_fuse_extract_IMU(LGdat,HGdat):
         resamp_HG = resamp_HG[:-lag,:]
         
     elif lag < 0:
-        LGtime = LGtime[:-lag]
-        gyr = gyr[:-lag,:]
-        acc_lg = acc_lg[:-lag,:]
-        resamp_HG = resamp_HG[lag:,:]
+        LGtime = LGtime[:lag]
+        gyr = gyr[:lag,:]
+        acc_lg = acc_lg[:lag,:]
+        resamp_HG = resamp_HG[-lag:,:]
     
     acc = acc_lg
     

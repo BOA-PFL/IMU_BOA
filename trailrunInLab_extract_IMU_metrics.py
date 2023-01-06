@@ -84,10 +84,10 @@ def align_fuse_extract_IMU(LGdat,HGdat):
         resamp_HG = resamp_HG[:-lag,:]
         
     elif lag < 0:
-        LGtime = LGtime[:-lag]
-        gyr = gyr[:-lag,:]
-        acc_lg = acc_lg[:-lag,:]
-        resamp_HG = resamp_HG[lag:,:]
+        LGtime = LGtime[:lag]
+        gyr = gyr[:lag,:]
+        acc_lg = acc_lg[:lag,:]
+        resamp_HG = resamp_HG[-lag:,:]
     
     acc = acc_lg
     
@@ -329,7 +329,7 @@ def filtIMUsig(sig_in,cut,t):
 # Obtain IMU signals
 fPath = 'C:\\Users\\eric.honert\\Boa Technology Inc\\PFL Team - General\\Testing Segments\\EndurancePerformance\\TrailRun_2022\\InLabData\\IMU\\'
 
-save_on = 2
+save_on = 1
 
 # High and Low G accelerometers: note that the gyro is in the low G file
 Hentries = [fName for fName in os.listdir(fPath) if fName.endswith('highg.csv') and fName.count('00218')]
@@ -348,13 +348,14 @@ rMLacc = []
 rIEgyro = []
 pIEgyro = []
 imuSpeed = []
+pAcc = []
 
 # Filtering frequencies
 acc_cut = 50
 gyr_cut = 30
 
 # Index through the low-g files
-for ii in range(179,len(Lentries)):
+for ii in range(0,len(Lentries)):
     print(Lentries[ii])
     # Load the trials here
     Ldf = pd.read_csv(fPath + Lentries[ii],sep=',', header = 0)
@@ -409,14 +410,15 @@ for ii in range(179,len(Lentries)):
             approx_CT = np.diff(iHS)
             iHS_t = IMUtime[iHS]
             jj = 0
-        
-    
-    # plt.figure(ii)
-    # plt.plot(iacc[:,0])
-    # plt.plot(iHS,iacc[iHS,0],'ko')
-    # plt.close()
-    
+            
     iGS = np.where((np.diff(iHS_t) > 0.5)*(np.diff(iHS_t) < 1.5))[0]
+    # Debugging
+    # plt.plot(IMUtime,iacc[:,0])
+    # plt.plot(iHS_t,iacc[iHS,0],'ro')
+    # plt.plot(iHS_t[iGS],iacc[iHS[iGS],0],'ko')
+    # plt.ylabel('Vertical Acceleration [m/s^2]')
+    # plt.xlabel('Time [sec]')
+    # plt.close()
     # Compute IMU running speed
     imuSpeed = np.concatenate((imuSpeed,computeRunSpeedIMU(iacc,igyr,iHS,iMS,iGS,IMUtime)),axis = None)
     
@@ -425,8 +427,10 @@ for ii in range(179,len(Lentries)):
     igyr = filtIMUsig(igyr,gyr_cut,IMUtime)
     # Compute stride metrics here
     jerk = np.linalg.norm(np.array([np.gradient(iacc[:,jj],IMUtime) for jj in range(3)]),axis=0)
+    acc_mag = np.linalg.norm(iacc,axis=1)
     for jj in iGS:
         pJerk.append(np.max(jerk[iHS[jj]:iHS[jj+1]]))
+        pAcc.append(np.max(acc_mag[iHS[jj]:iHS[jj+1]]))
         pGyr.append(np.abs(np.min(igyr[iHS[jj]:iHS[jj+1],1])))
         rMLacc.append(np.max(iacc[iHS[jj]:iHS[jj+1],1])-np.min(iacc[iHS[jj]:iHS[jj+1],1]))
         appTO = round(0.2*(iHS[jj+1]-iHS[jj])+iHS[jj])
@@ -451,11 +455,11 @@ for ii in range(179,len(Lentries)):
     
         
 outcomes = pd.DataFrame({'Subject':list(oSubject), 'Config': list(oConfig),'Label':list(oLabel), 'Speed':list(oSpeed), 'Sesh': list(oSesh),
-                          'pJerk':list(pJerk), 'pGyr':list(pGyr),'rMLacc':list(rMLacc),'rIEgyro':list(rIEgyro),'pIEgyro':list(pIEgyro),'imuSpeed':list(imuSpeed)})
+                          'pJerk':list(pJerk), 'pAcc':list(pAcc), 'pGyr':list(pGyr),'rMLacc':list(rMLacc),'rIEgyro':list(rIEgyro),'pIEgyro':list(pIEgyro),'imuSpeed':list(imuSpeed)})
 if save_on == 1:
-    outcomes.to_csv('C:\\Users\eric.honert\\Boa Technology Inc\\PFL Team - General\\Testing Segments\\EndurancePerformance\\TrailRun_2022\\InLabIMUmetrics.csv',header=True)
+    outcomes.to_csv('C:\\Users\eric.honert\\Boa Technology Inc\\PFL Team - General\\Testing Segments\\EndurancePerformance\\TrailRun_2022\\InLabData\\InLabIMUmetrics.csv',header=True)
 elif save_on == 2:
-    outcomes.to_csv('C:\\Users\eric.honert\\Boa Technology Inc\\PFL Team - General\\Testing Segments\\EndurancePerformance\\TrailRun_2022\\InLabIMUmetrics.csv',mode = 'a',header=False)
+    outcomes.to_csv('C:\\Users\eric.honert\\Boa Technology Inc\\PFL Team - General\\Testing Segments\\EndurancePerformance\\TrailRun_2022\\InLabData\\InLabIMUmetrics.csv',mode = 'a',header=False)
 
 
 # plt.figure(3)
