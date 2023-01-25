@@ -123,15 +123,18 @@ def findEdgeAng_gyr(gyr_roll,t,turn_idx):
     ----------
     gyr_roll : numpy array
         z-component of the gyroscope.
-    t : TYPE
-        DESCRIPTION.
-    turn_idx : TYPE
-        DESCRIPTION.
+    t : numpy array
+        time provided by the 
+    turn_idx : numpy array
+        the indicies that indicate the peaks in the turn detection gyroscope
+        signal.
 
     Returns
     -------
-    None.
-
+    edgeang_dwn : list
+        maximum edge angle from each detected turn from the downhill ski
+    edgeang_up : list
+        maximum edge angle from each detected turn from the uphill ski
     """
     
     edgeang_dwn = []
@@ -152,7 +155,7 @@ def findEdgeAng_gyr(gyr_roll,t,turn_idx):
 gyr_cut = 6
 
 # Debugging variables
-debug = 1
+debug = 0
 badFileList = []
 
 # Variables for first time trial segmentation
@@ -165,7 +168,8 @@ edgeang_dwn_gyrL = []
 edgeang_dwn_gyrR = []
 
 print('Select ALL files for a subject')
-filename = askopenfilenames() # Open .csv files
+fPath = 'C:\\Users\\eric.honert\\Boa Technology Inc\\PFL Team - General\\Testing Segments\\Snow Performance\\SkiValidation_Dec2022\\IMU\\'
+filename = askopenfilenames(initialdir = fPath) # Open .csv files
 
 # This file path will need to change!
 fPath = os.path.dirname(filename[0]) + '/'
@@ -227,7 +231,7 @@ for ii in range(0,len(Lentries)):
     
     #__________________________________________________________________________
     # Turn segmentation: Find when the turn is happening
-    ipeaks,_ = sig.find_peaks(igyr_det, height = 20, distance = 300)
+    ipeaks,_ = sig.find_peaks(igyr_det, height = 10, distance = 200)
     # Visualize the peak detection
     answer = True # Defaulting to true: In case "debug" is not used
     if debug == 1:
@@ -258,5 +262,13 @@ np.save(fPath+'TrialSeg.npy',trial_segment)
 # Feedback for the athletes
 L_avgedge = np.mean(edgeang_dwn_gyrL)
 R_avgedge = np.mean(edgeang_dwn_gyrR)
+avgDiff = abs(R_avgedge - L_avgedge)
+
 print('Average Edge Angle: ', round(np.mean(edgeang_dwn_gyrL + edgeang_dwn_gyrR)))
-print('Edge Angle Difference: ', round(L_avgedge-R_avgedge))   
+if R_avgedge > L_avgedge:
+    print("Skier has ", round(avgDiff), "greater edge angle on right foot")
+
+if L_avgedge > R_avgedge:
+    print("Skier has ", round(avgDiff), "greater edge angle on left foot")
+
+
