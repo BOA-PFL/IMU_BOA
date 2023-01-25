@@ -6,7 +6,6 @@ Code to examine angles provided by vicon IMUs
 
 @author: Eric.Honert
 """
-
 # Import Libraries
 import pandas as pd
 import numpy as np
@@ -23,6 +22,15 @@ from tkinter import messagebox
 
 # Obtain IMU signals
 fPath = 'C:\\Users\\eric.honert\\Boa Technology Inc\\PFL Team - General\\Testing Segments\\Snow Performance\\SkiValidation_Dec2022\\IMU\\'
+
+# Global variables
+# Filtering
+acc_cut = 10
+gyr_cut = 6
+
+# Debugging variables
+debug = 0
+save_on = 0
 
 # Functions
 def align_fuse_extract_IMU_angles(LGdat,HGdat):
@@ -135,11 +143,6 @@ def findEdgeAng_gyr(gyr_roll,t,turn_idx):
     return(edgeang_dwn,edgeang_up)
 
 
-acc_cut = 10
-gyr_cut = 6
-
-# Debugging variables
-debug = 1
 badFileList = []
 
 # Variables for first time trial segmentation
@@ -150,6 +153,9 @@ trial_name = []
 # Biomechanical outcomes
 edgeang_dwn_gyr = []
 edgeang_up_gyr = []
+sName = []
+cName = []
+TrialNo = []
 Side = []
 TurnTime = []
 
@@ -168,6 +174,11 @@ Lentries = [fName for fName in os.listdir(fPath) if fName.endswith('lowg.csv')]
 for ii in range(0,len(Lentries)):
     # Grab the .csv files
     print(Lentries[ii])
+    # Extract trial information
+    tmpsName = Lentries[ii].split(sep = "-")[0]
+    tmpConfig = Lentries[ii].split(sep = "-")[1]
+    tmpTrialNo = Lentries[ii].split(sep = "-")[2][1]
+    
     Ldf = pd.read_csv(fPath + Lentries[ii],sep=',', header = 0)
     Hdf = pd.read_csv(fPath + Hentries[ii],sep=',', header = 0)
     
@@ -175,7 +186,7 @@ for ii in range(0,len(Lentries)):
     [IMUtime,iacc,igyr,iang] = align_fuse_extract_IMU_angles(Ldf,Hdf)
     # Convert the time
     IMUtime = (IMUtime - IMUtime[0])*(1e-6)
-    
+       
     if Lentries[ii].count('03399'):
         # For the right gyro, invert the roll
         print('Right IMU')
@@ -190,7 +201,6 @@ for ii in range(0,len(Lentries)):
         # If the trial was previously segmented, grab the appropriate start/end points
         idx = trial_name.index(Lentries[ii])
         tmp_st = int(st_idx[idx]); tmp_en = int(en_idx[idx]);
-        print('success')
     else:
         # If new trial, us UI to segment the trial
         fig, ax = plt.subplots()
@@ -211,7 +221,7 @@ for ii in range(0,len(Lentries)):
     
     #__________________________________________________________________________
     # Turn segmentation: Find when the turn is happening
-    ipeaks,_ = sig.find_peaks(igyr_det, height = 20, distance = 300)
+    ipeaks,_ = sig.find_peaks(igyr_det, height = 10, distance = 200)
     # Visualize the peak detection
     answer = True # Defaulting to true: In case "debug" is not used
     if debug == 1:
@@ -232,15 +242,27 @@ for ii in range(0,len(Lentries)):
         tmp_edge_dwn,tmp_edge_up = findEdgeAng_gyr(igyr[:,2],IMUtime,ipeaks)
         edgeang_dwn_gyr.extend(tmp_edge_dwn)
         edgeang_up_gyr.extend(tmp_edge_up)
+        # Appending names
         if Lentries[ii].count('03399'):
             Side = Side + ['R']*len(tmp_edge_dwn)
         else:
             Side = Side + ['L']*len(tmp_edge_dwn)
+        sName = sName + [tmpsName]*len(tmp_edge_dwn)
+        cName = cName + [tmpConfig]*len(tmp_edge_dwn)
+        TrialNo = TrialNo + [tmpTrialNo]*len(tmp_edge_dwn)
+        
 
 # Save the trial segmentation
 trial_segment = np.array([trial_name,st_idx,en_idx])
-np.save(fPath+'TrialSeg.npy',trial_segment)    
-    
+np.save(fPath+'TrialSeg.npy',trial_segment)
+
+# Save the outcome metrics
+outcomes = pd.DataFrame({'Subject':list(sName),'Config':list(cName),'TrialNo':list(TrialNo),'Side': list(Side),
+                                 'edgeang_dwn_gyr':list(edgeang_dwn_gyr), 'edgeang_up_gyr':list(edgeang_up_gyr)
+                                 })  
+
+if save_on == 1:
+    outcomes.to_csv(fPath+'IMUOutcomes_FBS.csv', header=True, index = False)
 
 
 
