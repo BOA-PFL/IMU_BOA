@@ -177,7 +177,7 @@ for ii in range(0,len(Lentries)):
     # Extract trial information
     tmpsName = Lentries[ii].split(sep = "-")[0]
     tmpConfig = Lentries[ii].split(sep = "-")[1]
-    tmpTrialNo = Lentries[ii].split(sep = "-")[2][1]
+    tmpTrialNo = Lentries[ii].split(sep = "-")[2][0]
     
     Ldf = pd.read_csv(fPath + Lentries[ii],sep=',', header = 0)
     Hdf = pd.read_csv(fPath + Hentries[ii],sep=',', header = 0)
