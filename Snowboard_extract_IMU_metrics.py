@@ -154,6 +154,7 @@ trial_name = []
 boardAng_toe = []
 boardAng_heel= []
 boot_flex = []
+boot_flex2 = []
 
 sName = []
 cName = []
@@ -194,7 +195,7 @@ for l in Lentries:
 for ii in range(0,len(Lentries_board)):
     # Grab the .csv files
     
-    ii = 0
+    ii = 6
     print(Lentries_board[ii])
     # Extract trial information
     tmpsName = Lentries_board[ii].split(sep = "-")[0]
@@ -206,6 +207,29 @@ for ii in range(0,len(Lentries_board)):
     Ldf_boot = pd.read_csv(fPath + Lentries_boot[ii], sep = ',', header = 0)
     Hdf_board = pd.read_csv(fPath + Hentries_board[ii],sep=',', header = 0)
     Hdf_boot = pd.read_csv(fPath + Hentries_boot[ii], sep = ',', header = 0 )
+    
+    if Ldf_board.unix_timestamp_microsec[0] < Ldf_boot.unix_timestamp_microsec[0]:
+        Ldf_board = Ldf_board[Ldf_board.unix_timestamp_microsec >= Ldf_boot.unix_timestamp_microsec[0]]
+    else: 
+        Ldf_boot = Ldf_boot[Ldf_boot.unix_timestamp_microsec >= Ldf_board.unix_timestamp_microsec[0]]
+        
+        
+    if Hdf_board.time_s[0] < Hdf_boot.time_s[0]:
+        Hdf_board = Hdf_board[Hdf_board.time_s >= Hdf_boot.time_s[0]]
+    else: 
+        Hdf_boot = Hdf_boot[Hdf_boot.time_s >= Hdf_board.time_s[0]]
+        
+        
+    if Ldf_board['unix_timestamp_microsec'].iloc[-1] > Ldf_boot['unix_timestamp_microsec'].iloc[-1]:
+        Ldf_board = Ldf_board[Ldf_board.unix_timestamp_microsec <= Ldf_boot['unix_timestamp_microsec'].iloc[-1]]
+    else: 
+        Ldf_boot = Ldf_boot[Ldf_boot.unix_timestamp_microsec <= Ldf_board['unix_timestamp_microsec'].iloc[-1]]
+        
+    if Hdf_board['unix_timestamp_microsec'].iloc[-1] > Hdf_boot['unix_timestamp_microsec'].iloc[-1]:
+        Hdf_board = Hdf_board[Hdf_board.unix_timestamp_microsec <= Hdf_boot['unix_timestamp_microsec'].iloc[-1]]
+    else: 
+        Hdf_boot = Hdf_boot[Hdf_boot.unix_timestamp_microsec <= Hdf_board['unix_timestamp_microsec'].iloc[-1]]
+        
 
     # Combine the IMU data
     [IMUtime_board,iacc_board,igyr_board,iang_board] = align_fuse_extract_IMU_angles(Ldf_board,Hdf_board)
@@ -294,6 +318,7 @@ for ii in range(0,len(Lentries_board)):
             
             tmp_boot_flex = tmp_bootang-tmp_boardang 
             boot_flex.append(np.max(tmp_boot_flex))
+            boot_flex2.append( np.max(tmp_bootang) - np.max(tmp_boardang) )
             
         # Appending names
         
@@ -307,12 +332,12 @@ trial_segment = np.array([trial_name,st_idx,en_idx])
 np.save(fPath+'TrialSeg.npy',trial_segment)
 
 # Save the outcome metrics
-outcomes = pd.DataFrame({'Subject':list(sName),'Config':list(cName),'TrialNo':list(TrialNo),'Side': list(Side),
-                                 'BoardAngle_ToeTurns':list(boardAng_toe), 'BoardAngle_HeelTurns':list(boardAng_heel), 'BootFlex':list(boot_flex)
-                                 })  
+outcomes = pd.DataFrame({'Subject':list(sName),'Config':list(cName),'TrialNo':list(TrialNo),
+                         'BoardAngle_ToeTurns':list(boardAng_toe), 'BoardAngle_HeelTurns':list(boardAng_heel), 
+                         'BootFlex':list(boot_flex), 'BootFlex_2':list(boot_flex2)})  
 
 if save_on == 1:
-    outcomes.to_csv(fPath+'IMUOutcomes_FBS.csv', header=True, index = False)
+    outcomes.to_csv(fPath+'IMUOutcomes.csv', header=True, index = False)
 
 
 
