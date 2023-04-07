@@ -14,6 +14,7 @@ import scipy
 import scipy.interpolate
 from scipy.integrate import cumtrapz
 import scipy.signal as sig
+import statsmodels.api as sm
 import matplotlib.pyplot as plt
 import os
 import time
@@ -154,7 +155,6 @@ trial_name = []
 boardAng_toe = []
 boardAng_heel= []
 boot_flex = []
-boot_flex2 = []
 
 sName = []
 cName = []
@@ -195,7 +195,7 @@ for l in Lentries:
 for ii in range(0,len(Lentries_board)):
     # Grab the .csv files
     
-    ii = 6
+    #ii = 6
     print(Lentries_board[ii])
     # Extract trial information
     tmpsName = Lentries_board[ii].split(sep = "-")[0]
@@ -208,42 +208,14 @@ for ii in range(0,len(Lentries_board)):
     Hdf_board = pd.read_csv(fPath + Hentries_board[ii],sep=',', header = 0)
     Hdf_boot = pd.read_csv(fPath + Hentries_boot[ii], sep = ',', header = 0 )
     
-    if Ldf_board.unix_timestamp_microsec[0] < Ldf_boot.unix_timestamp_microsec[0]:
-        Ldf_board = Ldf_board[Ldf_board.unix_timestamp_microsec >= Ldf_boot.unix_timestamp_microsec[0]]
-    else: 
-        Ldf_boot = Ldf_boot[Ldf_boot.unix_timestamp_microsec >= Ldf_board.unix_timestamp_microsec[0]]
-        
-        
-    if Hdf_board.time_s[0] < Hdf_boot.time_s[0]:
-        Hdf_board = Hdf_board[Hdf_board.time_s >= Hdf_boot.time_s[0]]
-    else: 
-        Hdf_boot = Hdf_boot[Hdf_boot.time_s >= Hdf_board.time_s[0]]
-        
-        
-    if Ldf_board['unix_timestamp_microsec'].iloc[-1] > Ldf_boot['unix_timestamp_microsec'].iloc[-1]:
-        Ldf_board = Ldf_board[Ldf_board.unix_timestamp_microsec <= Ldf_boot['unix_timestamp_microsec'].iloc[-1]]
-    else: 
-        Ldf_boot = Ldf_boot[Ldf_boot.unix_timestamp_microsec <= Ldf_board['unix_timestamp_microsec'].iloc[-1]]
-        
-    if Hdf_board['unix_timestamp_microsec'].iloc[-1] > Hdf_boot['unix_timestamp_microsec'].iloc[-1]:
-        Hdf_board = Hdf_board[Hdf_board.unix_timestamp_microsec <= Hdf_boot['unix_timestamp_microsec'].iloc[-1]]
-    else: 
-        Hdf_boot = Hdf_boot[Hdf_boot.unix_timestamp_microsec <= Hdf_board['unix_timestamp_microsec'].iloc[-1]]
-        
-
+    
     # Combine the IMU data
     [IMUtime_board,iacc_board,igyr_board,iang_board] = align_fuse_extract_IMU_angles(Ldf_board,Hdf_board)
     [IMUtime_boot, iacc_boot, igyr_boot, iang_boot] = align_fuse_extract_IMU_angles(Ldf_boot, Hdf_boot)
     # Convert the time
     IMUtime_board = (IMUtime_board - IMUtime_board[0])*(1e-6)
     IMUtime_boot = (IMUtime_boot - IMUtime_boot[0])*(1e-6)
-       
-          
-        
-    
-    igyr_det = filtIMUsig(igyr_board,0.5,IMUtime_board)
-    igyr_det = igyr_det[:,1]
-    
+   
     #__________________________________________________________________________
     # Trial Segmentation
     if Lentries_board[ii] in trial_name:
@@ -253,7 +225,7 @@ for ii in range(0,len(Lentries_board)):
     else:
         # If new trial, us UI to segment the trial
         fig, ax = plt.subplots()
-        ax.plot(igyr_det, label = 'Gyro Detection Signal')
+        ax.plot(igyr_board[:,1], label = 'Board Angle')
         fig.legend()
         print('Select start and end of analysis trial')
         pts = np.asarray(plt.ginput(2, timeout=-1))
@@ -262,13 +234,41 @@ for ii in range(0,len(Lentries_board)):
         st_idx.append(tmp_st)
         en_idx.append(tmp_en)
         trial_name.append(Lentries_board[ii])
+        
     #__________________________________________________________________________
     # Use only the data from the pre-selected region
     IMUtime_board = IMUtime_board[tmp_st:tmp_en]; IMUtime_boot = IMUtime_boot[tmp_st:tmp_en]
     iang_board = iang_board[tmp_st:tmp_en,:]; iang_boot = iang_boot[tmp_st:tmp_en]
     iacc_board = iacc_board[tmp_st:tmp_en,:]; iacc_boot = iacc_boot[tmp_st:tmp_en]
     igyr_board = igyr_board[tmp_st:tmp_en,:]; igyr_boot = igyr_boot[tmp_st:tmp_en]
-    igyr_det = igyr_det[tmp_st:tmp_en]
+    
+    igyr_board = filtIMUsig(igyr_board,gyr_cut,IMUtime_board)
+    igyr_boot = filtIMUsig(igyr_boot, gyr_cut, IMUtime_boot)
+    
+    
+    if tmpDir == 'Regular':
+        corr = sm.tsa.stattools.ccf(igyr_boot[:,2]*-1,igyr_board[:,1],adjusted=False)
+    else:
+        corr = sm.tsa.stattools.ccf(igyr_boot[:,2], igyr_board[:,1], adjusted=False)
+        
+    shift = sig.find_peaks(corr)[0][0]
+    
+    igyr_boot = igyr_boot[shift:]
+    IMUtime_boot = IMUtime_boot[shift:]
+    igyr_board = igyr_board[:-shift]
+    IMUtime_board = IMUtime_board[:-shift]
+    
+    
+        
+    
+    igyr_det = filtIMUsig(igyr_board,0.5,IMUtime_board)
+   
+    
+    
+    igyr_det = igyr_det[:,1]
+    
+    
+   
     
     #__________________________________________________________________________
     # Turn segmentation: Find when the turn is happening
@@ -289,22 +289,27 @@ for ii in range(0,len(Lentries_board)):
         print('Estimating point estimates')
         #______________________________________________________________________
         # Find the edge angles from the gyroscope
-        igyr_board = filtIMUsig(igyr_board,gyr_cut,IMUtime_board)
-        igyr_boot = filtIMUsig(igyr_boot, gyr_cut, IMUtime_boot)
-        tmp_boardtoe, tmp_boardheel = findEdgeAng_gyr(igyr_board[:,1],IMUtime_board,ipeaks)
+        
+       
+            
+            
+        tmp_boardheel, tmp_boardtoe = findEdgeAng_gyr(igyr_board[:,1],IMUtime_board,ipeaks)
         boardAng_toe.extend(tmp_boardtoe)
         boardAng_heel.extend(tmp_boardheel)
         
-        iacc_board = filtIMUsig(iacc_board, acc_cut, IMUtime_board)
         
-        # board_angle = []
-        # boot_angle = []
         
+        
+       
         #roll_ang = cumtrapz(gyr_roll[turn_idx[jj]:turn_idx[jj+1]],t[turn_idx[jj]:turn_idx[jj+1]],initial=0,axis=0)
         for jj in range(len(ipeaks)-1):
+            #jj = 1
+            
             tmp_boardang=cumtrapz(igyr_board[ipeaks[jj]:ipeaks[jj+1], 1], IMUtime_board[ipeaks[jj]:ipeaks[jj+1]], initial = 0, axis = 0)
             tmp_bootang =cumtrapz(igyr_boot[ipeaks[jj]:ipeaks[jj+1], 2], IMUtime_boot[ipeaks[jj]:ipeaks[jj+1]], initial = 0, axis = 0)
             
+            if tmpDir == 'Regular':
+                tmp_bootang = tmp_bootang*-1
             # Remove drift
             slope_board = tmp_boardang[-1]/(len(tmp_boardang)-1)
             drift_board = (slope_board*np.ones([len(tmp_boardang)]))*(np.array(range(len(tmp_boardang))))
@@ -317,8 +322,8 @@ for ii in range(0,len(Lentries_board)):
             # boot_angle.extend(tmp_bootang)
             
             tmp_boot_flex = tmp_bootang-tmp_boardang 
-            boot_flex.append(np.max(tmp_boot_flex))
-            boot_flex2.append( np.max(tmp_bootang) - np.max(tmp_boardang) )
+            boot_flex.append(abs(np.min(tmp_boot_flex)))
+            
             
         # Appending names
         
@@ -334,7 +339,7 @@ np.save(fPath+'TrialSeg.npy',trial_segment)
 # Save the outcome metrics
 outcomes = pd.DataFrame({'Subject':list(sName),'Config':list(cName),'TrialNo':list(TrialNo),
                          'BoardAngle_ToeTurns':list(boardAng_toe), 'BoardAngle_HeelTurns':list(boardAng_heel), 
-                         'BootFlex':list(boot_flex), 'BootFlex_2':list(boot_flex2)})  
+                         'BootFlex':list(boot_flex)})  
 
 if save_on == 1:
     outcomes.to_csv(fPath+'IMUOutcomes.csv', header=True, index = False)
