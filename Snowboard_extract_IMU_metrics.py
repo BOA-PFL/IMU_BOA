@@ -189,7 +189,9 @@ for l in Lentries:
     elif '03391' in l:
         Lentries_boot.append(l)
         
-
+bindingDat = pd.read_excel('C:/Users/Kate.Harrison/Boa Technology Inc/PFL Team - General/Testing Segments/Snow Performance/PFLMechanistic_StepOn_March2023/QualData.xlsx', 'Qual')
+bindingDat = bindingDat.iloc[:,:5].dropna()
+bindingDat['Subject'] = bindingDat['Subject'].str.replace(' ', '')
 
 
 for ii in range(0,len(Lentries_board)):
@@ -298,14 +300,25 @@ for ii in range(0,len(Lentries_board)):
         boardAng_heel.extend(tmp_boardheel)
         
         
-        
+        rearAng = bindingDat[bindingDat.Subject == tmpsName].reset_index()['RearBindingAngle'][0] * 0.0174533
         
        
         #roll_ang = cumtrapz(gyr_roll[turn_idx[jj]:turn_idx[jj+1]],t[turn_idx[jj]:turn_idx[jj+1]],initial=0,axis=0)
         for jj in range(len(ipeaks)-1):
             #jj = 1
             
-            tmp_boardang=cumtrapz(igyr_board[ipeaks[jj]:ipeaks[jj+1], 1], IMUtime_board[ipeaks[jj]:ipeaks[jj+1]], initial = 0, axis = 0)
+            igyr_boardTrim = igyr_board[ipeaks[jj]:ipeaks[jj+1], :]            
+            
+            rotZ = np.array([[cos(rearAng),-sin(rearAng),0], [sin(rearAng),cos(rearAng),0], [0,0,1]])
+        
+            igyr_boardRot = igyr_boardTrim @ rotZ
+            
+            # plt.figure()
+            # plt.plot(igyr_boardTrim[:,1], label = 'Raw boot angle')
+            # plt.plot(igyr_boardRot[:,1], label = 'Rotated boot angle')  
+            # plt.legend()
+            
+            tmp_boardang=cumtrapz(igyr_boardRot[:, 1], IMUtime_board[ipeaks[jj]:ipeaks[jj+1]], initial = 0, axis = 0)
             tmp_bootang =cumtrapz(igyr_boot[ipeaks[jj]:ipeaks[jj+1], 2], IMUtime_boot[ipeaks[jj]:ipeaks[jj+1]], initial = 0, axis = 0)
             
             if tmpDir == 'Regular':
@@ -342,7 +355,7 @@ outcomes = pd.DataFrame({'Subject':list(sName),'Config':list(cName),'TrialNo':li
                          'BootFlex':list(boot_flex)})  
 
 if save_on == 1:
-    outcomes.to_csv(fPath+'IMUOutcomes.csv', header=True, index = False)
+    outcomes.to_csv(fPath+'IMUOutcomes2.csv', header=True, index = False)
 
 
 
