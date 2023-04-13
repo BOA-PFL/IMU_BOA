@@ -247,26 +247,40 @@ for ii in range(0,len(Lentries_board)):
     igyr_board = filtIMUsig(igyr_board,gyr_cut,IMUtime_board)
     igyr_boot = filtIMUsig(igyr_boot, gyr_cut, IMUtime_boot)
     
-    
-    if tmpDir == 'Regular':
-        corr = sm.tsa.stattools.ccf(igyr_boot[:,2]*-1,igyr_board[:,1],adjusted=False)
-    else:
-        corr = sm.tsa.stattools.ccf(igyr_boot[:,2], igyr_board[:,1], adjusted=False)
-        
-    shift = sig.find_peaks(corr)[0][0]
-    
-    igyr_boot = igyr_boot[shift:]
-    IMUtime_boot = IMUtime_boot[shift:]
-    igyr_board = igyr_board[:-shift]
-    IMUtime_board = IMUtime_board[:-shift]
-    
-    
-        
-    
-    igyr_det = filtIMUsig(igyr_board,0.5,IMUtime_board)
    
     
+    if tmpDir == 'Regular':
+        
+        corr = sig.correlate(igyr_boot[:,2]*-1,igyr_board[:,1], mode = 'full')
+        
+    else:
+        
+        corr = sig.correlate(igyr_boot[:,2], igyr_board[:,1], mode = 'full')
+        
+    lags = sig.correlation_lags(len(igyr_boot[:,2]),len(igyr_board[:,1]),mode='full')
     
+    # plt.figure()
+    # plt.plot(lags, corr)
+    lag = lags[np.argmax(corr)]
+    
+    if lag > 0:
+        igyr_boot = igyr_boot[lag:,:]
+        IMUtime_boot = IMUtime_boot[lag:]
+        igyr_board = igyr_board[:-lag,:]
+        IMUtime_board = IMUtime_board[:-lag]
+        
+    elif lag < 0:
+        igyr_boot = igyr_boot[:lag,:]
+        IMUtime_boot = IMUtime_boot[:lag]
+        igyr_board = igyr_board[-lag:,:]
+        IMUtime_board = IMUtime_board[-lag:]
+        
+    # plt.figure()
+    # plt.plot(igyr_boot[:,2], label = 'shifted boot gyr')
+    # plt.plot(igyr_board[:,1], label = 'shifted board gyr')
+    # plt.legend()
+    
+    igyr_det = filtIMUsig(igyr_board,0.5,IMUtime_board)
     igyr_det = igyr_det[:,1]
     
     
@@ -305,17 +319,17 @@ for ii in range(0,len(Lentries_board)):
        
         #roll_ang = cumtrapz(gyr_roll[turn_idx[jj]:turn_idx[jj+1]],t[turn_idx[jj]:turn_idx[jj+1]],initial=0,axis=0)
         for jj in range(len(ipeaks)-1):
-            #jj = 1
+            #jj = 0
             
             igyr_boardTrim = igyr_board[ipeaks[jj]:ipeaks[jj+1], :]            
             
             rotZ = np.array([[cos(rearAng),-sin(rearAng),0], [sin(rearAng),cos(rearAng),0], [0,0,1]])
         
-            igyr_boardRot = igyr_boardTrim @ rotZ
+            igyr_boardRot = (rotZ @ igyr_boardTrim.T).T
             
             # plt.figure()
-            # plt.plot(igyr_boardTrim[:,1], label = 'Raw boot angle')
-            # plt.plot(igyr_boardRot[:,1], label = 'Rotated boot angle')  
+            # plt.plot(igyr_boardTrim[:,1], label = 'Raw boot gyr')
+            # plt.plot(igyr_boardRot[:,1], label = 'Rotated boot gyr')  
             # plt.legend()
             
             tmp_boardang=cumtrapz(igyr_boardRot[:, 1], IMUtime_board[ipeaks[jj]:ipeaks[jj+1]], initial = 0, axis = 0)
@@ -327,12 +341,16 @@ for ii in range(0,len(Lentries_board)):
             slope_board = tmp_boardang[-1]/(len(tmp_boardang)-1)
             drift_board = (slope_board*np.ones([len(tmp_boardang)]))*(np.array(range(len(tmp_boardang))))
             tmp_boardang = tmp_boardang-drift_board
-            # board_angle.extend(tmp_boardang)
+            
             
             slope_boot = tmp_bootang[-1]/(len(tmp_bootang)-1)
             drift_boot = (slope_boot*np.ones([len(tmp_bootang)]))*(np.array(range(len(tmp_bootang))))
             tmp_bootang = tmp_bootang-drift_boot
-            # boot_angle.extend(tmp_bootang)
+            
+            # plt.figure()
+            # plt.plot(tmp_bootang, label = 'Boot Angle')
+            # plt.plot(tmp_boardang, label = 'Board Angle')
+            # plt.legend()
             
             tmp_boot_flex = tmp_bootang-tmp_boardang 
             boot_flex.append(abs(np.min(tmp_boot_flex)))
@@ -355,7 +373,7 @@ outcomes = pd.DataFrame({'Subject':list(sName),'Config':list(cName),'TrialNo':li
                          'BootFlex':list(boot_flex)})  
 
 if save_on == 1:
-    outcomes.to_csv(fPath+'IMUOutcomes2.csv', header=True, index = False)
+    outcomes.to_csv(fPath+'IMUOutcomes.csv', header=True, index = False)
 
 
 
