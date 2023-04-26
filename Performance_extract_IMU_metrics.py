@@ -18,9 +18,19 @@ from scipy.integrate import cumtrapz
 import scipy.signal as sig
 import matplotlib.pyplot as plt
 import os
-import time
 import addcopyfighandler
 from tkinter import messagebox
+
+
+# Obtain IMU signals
+fPath = 'C:\\Users\\eric.honert\\Boa Technology Inc\\PFL Team - General\\Testing Segments\\Hike\\FocusAnkleDualDial_Midcut_Sept2022\\IMU\\'
+
+save_on = 0
+debug = 1
+
+# High and Low G accelerometers: note that the gyro is in the low G file
+Hentries = [fName for fName in os.listdir(fPath) if fName.endswith('highg.csv') and fName.count('-Trail') and fName.count('03391')]
+Lentries = [fName for fName in os.listdir(fPath) if fName.endswith('lowg.csv') and fName.count('-Trail') and fName.count('03391')]
 
 # Functions
 def align_fuse_extract_IMU(LGdat,HGdat):
@@ -124,8 +134,15 @@ def estIMU_HS_MS(acc,gyr,t,HS_thresh):
         Mid-stance indices
 
     """
+    # Set up a 2nd order 50 Hz low pass buttworth filter
+    freq = 1/np.mean(np.diff(t))
+    w = 50 / (freq / 2) # Normalize the frequency
+    b, a = sig.butter(2, w, 'low')
     
-    HS_sig = (np.gradient(np.linalg.norm(acc,axis=1),t))**2
+    # Filter the IMU signals
+    acc_filt = np.array([sig.filtfilt(b, a, acc[:,jj]) for jj in range(3)]).T
+    
+    HS_sig = (np.gradient(np.linalg.norm(acc_filt,axis=1),t))**2
     gyr_energy = (np.linalg.norm(gyr,axis=1))**2
     # Create a midstance detection signal
     idx = np.linalg.norm(acc,axis = 1) > 2.5*9.81 # Only want values above 2g as they will be excluded, may need to reduce this threshold
@@ -330,17 +347,6 @@ def filtIMUsig(sig_in,cut,t):
     sig_out = np.array([sig.filtfilt(b, a, sig_in[:,jj]) for jj in range(3)]).T    
     return(sig_out)
 
-
-# Obtain IMU signals
-fPath = 'C:\\Users\\eric.honert\\Boa Technology Inc\\PFL Team - General\\Testing Segments\\Hike\\FocusAnkleDualDial_Midcut_Sept2022\\IMU\\'
-
-save_on = 0
-debug = 1
-
-# High and Low G accelerometers: note that the gyro is in the low G file
-Hentries = [fName for fName in os.listdir(fPath) if fName.endswith('highg.csv') and fName.count('-Trail_')]
-Lentries = [fName for fName in os.listdir(fPath) if fName.endswith('lowg.csv') and fName.count('-Trail_')]
-
 # 
 oSubject = []
 oConfig = []
@@ -355,6 +361,7 @@ pAcc = []
 pJerk = []
 rMLacc = []
 rIEgyro = []
+pIEgyro = []
 imuSpeed = []
 
 badFileList = []
@@ -370,11 +377,11 @@ for ii in range(0,len(Lentries)):
     Ldf = pd.read_csv(fPath + Lentries[ii],sep=',', header = 0)
     Hdf = pd.read_csv(fPath + Hentries[ii],sep=',', header = 0)
     # Save trial information
-    # Subject = Lentries[ii].split(sep = "-")[0]
-    # Config = Lentries[ii].split(sep="-")[1]
-    # Speed = Lentries[ii].split(sep="-")[2]
-    # Slope = Lentries[ii].split(sep="-")[3]
-    # Sesh = Lentries[ii].split(sep="-")[4][0]
+    Subject = Lentries[ii].split(sep = "-")[0]
+    Config = Lentries[ii].split(sep="-")[1]
+    Speed = Lentries[ii].split(sep="-")[2]
+    Slope = Lentries[ii].split(sep="-")[3]
+    Sesh = Lentries[ii].split(sep="-")[4][0]
     
 
     
@@ -393,7 +400,7 @@ for ii in range(0,len(Lentries)):
     jc = 0  # jump counter
     stc = 0 # start trial counter
     jj = 0
-    up_thresh = 8e8
+    up_thresh = 5e7 # This threshold should be modulated based on running or walking
     
     
     # Algorithm to detect 3 hops - may need to be updated
@@ -410,7 +417,7 @@ for ii in range(0,len(Lentries)):
         jj = jj+1
         
         if jj > 10:
-            up_thresh = up_thresh - 2e8
+            up_thresh = up_thresh - 2e7
             [iHS,iMS] = estIMU_HS_MS(iacc,igyr,IMUtime,up_thresh)
             approx_CT = np.diff(iHS)
             iHS_t = IMUtime[iHS]
@@ -452,27 +459,29 @@ for ii in range(0,len(Lentries)):
             rMLacc.append(np.max(iacc[iHS[jj]:iHS[jj+1],1])-np.min(iacc[iHS[jj]:iHS[jj+1],1]))
             appTO = round(0.2*(iHS[jj+1]-iHS[jj])+iHS[jj])
             rIEgyro.append(np.max(igyr[iHS[jj]:appTO,2])-np.min(igyr[iHS[jj]:appTO,2]))
+            # Assuming this is the left foot
+            pIEgyro.append(np.max(igyr[iHS[jj]:appTO,2]))
             
         # Appending
-        # oSubject = oSubject + [Subject]*len(iGS)
-        # oConfig = oConfig + [Config]*len(iGS)
+        oSubject = oSubject + [Subject]*len(iGS)
+        oConfig = oConfig + [Config]*len(iGS)
         # oLabel = oLabel + [Label]*len(iGS)
-        # setting = setting + ['0']*len(iGS)
-        # oSesh = oSesh + [Sesh]*len(iGS)
-        # if Slope[0] == 'n':
-        #     oSide = oSide + ['L']*len(iGS)
-        # else: 
-        #     oSide = oSide + ['R']*len(iGS)
+        setting = setting + ['0']*len(iGS)
+        oSesh = oSesh + [Sesh]*len(iGS)
+        if Slope[0] == 'n':
+            oSide = oSide + ['L']*len(iGS)
+        else: 
+            oSide = oSide + ['R']*len(iGS)
     
     # Clear variables
     iHS = []; iGS = []
     
-outcomes = pd.DataFrame({'Subject':list(oSubject), 'Config': list(oConfig), 'Movement':list(oLabel),
+outcomes = pd.DataFrame({'Subject':list(oSubject), 'Config': list(oConfig),
                          'Sesh': list(oSesh), 'pJerk':list(pJerk),'pAcc':list(pAcc), 'pGyr':list(pGyr),
-                           'rMLacc':list(rMLacc),'rIEgyro':list(rIEgyro),'imuSpeed':list(imuSpeed)})
+                           'rMLacc':list(rMLacc),'rIEgyro':list(rIEgyro),'pIEgyro':list(pIEgyro) ,'imuSpeed':list(imuSpeed)})
 
 
 if save_on == 1:
-    outcomes.to_csv('C:\\Users\eric.honert\\Boa Technology Inc\\PFL Team - General\\Testing Segments\\EndurancePerformance\\TrailRun_2022\\CompIMUmetrics.csv',mode = 'a',header=False)
+    outcomes.to_csv(fPath+'CompIMUmetrics.csv',header=True,index=False)
 
 

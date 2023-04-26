@@ -207,10 +207,14 @@ for ii in range(0,len(Lentries)):
 
     # Find the landings from the filtered gyroscope data
     landings = []
-    perc_peak = 0.6
-    while len(landings) < 8:
-        landings,peakheights = scipy.signal.find_peaks(landing_sig[:-10000], distance = 8000,prominence = 200, height = perc_peak*np.max(landing_sig))
+    perc_peak = 0.5
+    IT = 1
+    while len(landings) < 6 and IT < 6:
+        landings,peakheights = scipy.signal.find_peaks(landing_sig[:-10000], distance = 5000,prominence = 200, height = perc_peak*np.max(landing_sig))
+        if len(landings) > 8:
+            landings,peakheights = scipy.signal.find_peaks(landing_sig[:-10000], distance = 10000,prominence = 200, height = perc_peak*np.max(landing_sig))
         perc_peak = perc_peak - 0.1
+        IT = IT + 1  
     
     igyr = filtIMUsig(igyr, gyr_cut, IMUtime)
     igyr_mag = np.linalg.norm(igyr,axis = 1)
