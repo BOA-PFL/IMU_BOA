@@ -17,85 +17,17 @@ import os
 import addcopyfighandler
 from tkinter import messagebox
 
+# Obtain IMU signals
+fPath = 'C:\\Users\\eric.honert\\Boa Technology Inc\\PFL Team - General\\Testing Segments\\WorkWear_Performance\\EH_Workwear_MidCutStabilityI_CPDMech_June23\\IMU\\'
+
+save_on = 1
+debug = 0
+
+# High and Low G accelerometers: note that the gyro is in the low G file
+Lentries = [fName for fName in os.listdir(fPath) if fName.endswith('_lowg.csv') and fName.count('SLLt')]
+
+
 # Functions
-def align_fuse_extract_IMU(LGdat,HGdat):
-    """
-    Function to align, fuse, and extract all IMU information
-    
-    The high-g accelerometer is interpolated to the low-g accelerometer using
-    the UNIX time-stamps in the innate files. The two accelerometers are then
-    aligned using a cross correlation. Typically this results in a 1 frame
-    phase shift
-
-    Parameters
-    ----------
-    LGdat : dataframe
-        low-g data frame that is extracted as raw data from Capture.U. This
-        dataframe contains both the low-g accelerometer and the gyroscope.
-    HGdat : dataframe
-        low-g data frame that is extracted as raw data from Capture.U.
-
-    Returns
-    -------
-    LGtime : numpy array (Nx1)
-        time (UNIX) from the low-g file
-    acc : numpy array (Nx3)
-        X,Y,Z fused (between low-g and high-g) acceleration from the IMU
-    gyr : numpy array (Nx3)
-        X,Y,Z gyroscope from the IMU
-
-    """
-    # LGdat: low-g dataframe (contains accelerometer and gyroscope)
-    # HGdat: high-g data frame (contains only accelerometer)
-    
-    # Need to align the data
-    # 1: get the data collection frequency from the low-g acclerometer
-    acc_lg = np.array(LGdat.iloc[:,2:5])
-    gyr = np.array(LGdat.iloc[:,5:])
-    
-    dum = np.array(HGdat.iloc[:,2:])
-    
-    HGtime = np.array(HGdat.iloc[:,0])
-    LGtime = np.array(LGdat.iloc[:,0])
-    
-    idx = (LGtime < np.max(HGtime))*(LGtime > np.min(HGtime))
-    LGtime = LGtime[idx]
-    acc_lg = acc_lg[idx,:]
-    gyr = gyr[idx,:]
-    
-    # Create an empty array to fill with the resampled/downsampled high-g acceleration    
-    resamp_HG = np.zeros([len(LGtime),3])
-        
-    for jj in range(3):
-        f = scipy.interpolate.interp1d(HGtime,dum[:,jj])
-        resamp_HG[:,jj] = f(LGtime)
-        
-    # Cross-correlate the y-components
-    corr_arr = sig.correlate(acc_lg[:,1],resamp_HG[:,1],mode='full')
-    lags = sig.correlation_lags(len(acc_lg[:,1]),len(resamp_HG[:,1]),mode='full')
-    lag = lags[np.argmax(corr_arr)]
-    
-    if lag > 0:
-        LGtime = LGtime[lag:]
-        gyr = gyr[lag:,:]
-        acc_lg = acc_lg[lag:,:]
-        resamp_HG = resamp_HG[:-lag,:]
-        
-    elif lag < 0:
-        LGtime = LGtime[:lag]
-        gyr = gyr[:lag,:]
-        acc_lg = acc_lg[:lag,:]
-        resamp_HG = resamp_HG[-lag:,:]
-    
-    acc = acc_lg
-    
-    # Find when the data is above/below 16G and replace with high-g accelerometer
-    for jj in range(3):
-        idx = np.abs(acc[:,jj]) > (9.81*16-0.1)
-        acc[idx,jj] = resamp_HG[idx,jj]
-    
-    return [LGtime,acc,gyr]
-
 def estIMU_singleleg_landings(acc,t,HS_thresh):
     """
     Function to estimate heel-strike and mid-stance indices from the IMU
@@ -164,15 +96,6 @@ def filtIMUsig(sig_in,cut,t):
     return(sig_out)
 
 
-# Obtain IMU signals
-fPath = 'C:\\Users\\eric.honert\\Boa Technology Inc\\PFL Team - General\\Testing Segments\\Hike\\FocusAnkleDualDial_Midcut_Sept2022\\IMU\\'
-
-save_on = 0
-debug = 1
-
-# High and Low G accelerometers: note that the gyro is in the low G file
-Hentries = [fName for fName in os.listdir(fPath) if fName.endswith('_highg.csv') and fName.count('and') or fName.endswith('_highg.csv') and fName.count('SLTrail')]
-Lentries = [fName for fName in os.listdir(fPath) if fName.endswith('_lowg.csv') and fName.count('and') or fName.endswith('_lowg.csv') and fName.count('SLTrail')]
 
 # 
 oSubject = []
@@ -185,17 +108,19 @@ badFileList = []
 gyr_cut = 5
 
 # Index through the low-g files
-for ii in range(0,len(Lentries)):
+for ii in range(6,len(Lentries)):
     print(Lentries[ii])
     # Load the trials here
     Ldf = pd.read_csv(fPath + Lentries[ii],sep=',', header = 0)
-    Hdf = pd.read_csv(fPath + Hentries[ii],sep=',', header = 0)
     # Save trial information
     Subject = Lentries[ii].split(sep = "-")[1]
     Config = Lentries[ii].split(sep="-")[2]
     
-    # Fuse the low and high-g accelerometer data together    
-    [IMUtime,iacc,igyr] = align_fuse_extract_IMU(Ldf,Hdf)
+    # Fuse the low and high-g accelerometer data together
+    igyr = np.array(Ldf.iloc[:,5:])
+    iacc = np.array(Ldf.iloc[:,2:5])
+    
+    IMUtime = np.array(Ldf.iloc[:,0])
     # Convert the time
     IMUtime = (IMUtime - IMUtime[0])*(1e-6)
        
@@ -207,10 +132,14 @@ for ii in range(0,len(Lentries)):
 
     # Find the landings from the filtered gyroscope data
     landings = []
-    perc_peak = 0.6
-    while len(landings) < 8:
-        landings,peakheights = scipy.signal.find_peaks(landing_sig[:-10000], distance = 8000,prominence = 200, height = perc_peak*np.max(landing_sig))
+    perc_peak = 0.5
+    IT = 1
+    while len(landings) < 6 and IT < 6:
+        landings,peakheights = scipy.signal.find_peaks(landing_sig[:-10000], distance = 5000,prominence = 200, height = perc_peak*np.max(landing_sig))
+        if len(landings) > 8:
+            landings,peakheights = scipy.signal.find_peaks(landing_sig[:-10000], distance = 10000,prominence = 200, height = perc_peak*np.max(landing_sig))
         perc_peak = perc_peak - 0.1
+        IT = IT + 1  
     
     igyr = filtIMUsig(igyr, gyr_cut, IMUtime)
     igyr_mag = np.linalg.norm(igyr,axis = 1)
@@ -291,5 +220,5 @@ outcomes = pd.DataFrame({'Subject':list(oSubject), 'Config': list(oConfig),
                           'StabalizeTime':list(stabalize_time)})
 
 if save_on == 1:
-    outcomes.to_csv('C:\\Users\\eric.honert\\Boa Technology Inc\\PFL Team - General\\Testing Segments\\Hike\\FocusAnkleDualDial_Midcut_Sept2022\\TrailStabilize.csv',header=True)
+    outcomes.to_csv(fPath + 'TrailStabilize.csv',header=True)
 

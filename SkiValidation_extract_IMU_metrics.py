@@ -14,6 +14,7 @@ import scipy
 import scipy.interpolate
 from scipy.integrate import cumtrapz
 import scipy.signal as sig
+from scipy.fft import fft, fftfreq
 import matplotlib.pyplot as plt
 import os
 import time
@@ -29,7 +30,7 @@ acc_cut = 10
 gyr_cut = 6
 
 # Debugging variables
-debug = 0
+debug = 1
 save_on = 0
 
 # Functions
@@ -129,18 +130,82 @@ def filtIMUsig(sig_in,cut,t):
 def findEdgeAng_gyr(gyr_roll,t,turn_idx):
     
     edgeang_dwn = []
+    rate_edgeang_dwn = []
+    timeRAD_edgeang_dwn = []
+    timePeak = []
     edgeang_up = []
     
+    # Provide interpolation variable: 
+    intp_var = np.zeros((101,len(turn_idx)-1))
+    
+    
     for jj in range(len(turn_idx)-1):
-        roll_ang = cumtrapz(gyr_roll[turn_idx[jj]:turn_idx[jj+1]],t[turn_idx[jj]:turn_idx[jj+1]],initial=0,axis=0)
+        roll_angvel = gyr_roll[turn_idx[jj]:turn_idx[jj+1]]
+        t_turn = t[turn_idx[jj]:turn_idx[jj+1]]
+        roll_ang = cumtrapz(roll_angvel,t[turn_idx[jj]:turn_idx[jj+1]],initial=0,axis=0)
         # Remove drift
         slope = roll_ang[-1]/(len(roll_ang)-1)
         drift = (slope*np.ones([len(roll_ang)]))*(np.array(range(len(roll_ang))))
         roll_ang = roll_ang-drift
         edgeang_dwn.append(np.max(roll_ang))
         edgeang_up.append(abs(np.min(roll_ang)))
+        # Find the initial slope when going onto the edge
+        zero_cross = np.where(roll_angvel < 0)[0][0]
+        rate_edgeang_dwn.append(roll_ang[zero_cross]/(t_turn[zero_cross]-t_turn[0]))
+        timeRAD_edgeang_dwn.append(t_turn[zero_cross]-t_turn[0])
+        # Time to peak edge angle
+        idx = np.argmax(roll_ang)
+        timePeak.append(t_turn[idx]-t_turn[0])
+        
+        # Store the interpolated time-continous
+        f = scipy.interpolate.interp1d(np.arange(0,len(roll_ang)),roll_ang)
+        intp_var[:,jj] = f(np.linspace(0,len(roll_ang)-1,101))
+        
     
-    return(edgeang_dwn,edgeang_up)
+    return(edgeang_dwn,edgeang_up,rate_edgeang_dwn,timeRAD_edgeang_dwn,timePeak)
+
+def fft_50cutoff(var,landings,t):
+    """
+    Function to crop the intended variable into strides, pad the strides with 
+    zeros and perform the FFT on the variable of interest
+
+    Parameters
+    ----------
+    var : list or numpy array
+        Variable of interest
+    landings : list
+        foot-contact or landing indices
+
+    Returns
+    -------
+    freq50
+
+    """
+    # Frequency of the signal
+    freq = 1/np.mean(np.diff(t))
+    
+    freq50 = []
+    # Index through the strides
+    for ii in range(len(landings)-1):
+        # Zero-Pad the Variable
+        intp_var = np.zeros(5000)
+        intp_var[0:landings[ii+1]-landings[ii]] = var[landings[ii]:landings[ii+1]]
+        fft_out = fft(intp_var)
+        
+        xf = fftfreq(5000,1/freq)
+        # Only look at the positive
+        idx = xf > 0
+        fft_out = abs(fft_out[idx])
+        xf = xf[idx]
+        
+        # Find the frequency cut-off for 50% of the signal power
+        dum = cumtrapz(fft_out)
+        dum = dum/dum[-1]
+        idx = np.where(dum > 0.5)[0][0]
+        
+        freq50.append(xf[idx])
+        
+    return freq50
 
 
 badFileList = []
@@ -152,7 +217,12 @@ trial_name = []
 
 # Biomechanical outcomes
 edgeang_dwn_gyr = []
+RAD_dwn = [] # Rate of angle development
+RADt_dwn = [] # Time corresponding to rate of angle development
+edgeangt_dwn_gyr = []
 edgeang_up_gyr = []
+freq50fft = []
+
 sName = []
 cName = []
 TrialNo = []
@@ -171,7 +241,7 @@ Hentries = [fName for fName in os.listdir(fPath) if fName.endswith('highg.csv')]
 Lentries = [fName for fName in os.listdir(fPath) if fName.endswith('lowg.csv')]
 
 
-for ii in range(0,len(Lentries)):
+for ii in range(223,len(Lentries)):
     # Grab the .csv files
     print(Lentries[ii])
     # Extract trial information
@@ -221,7 +291,7 @@ for ii in range(0,len(Lentries)):
     
     #__________________________________________________________________________
     # Turn segmentation: Find when the turn is happening
-    ipeaks,_ = sig.find_peaks(igyr_det, height = 10, distance = 200)
+    ipeaks,_ = sig.find_peaks(igyr_det, height = 15, distance = 300)
     # Visualize the peak detection
     answer = True # Defaulting to true: In case "debug" is not used
     if debug == 1:
@@ -239,9 +309,16 @@ for ii in range(0,len(Lentries)):
         #______________________________________________________________________
         # Find the edge angles from the gyroscope
         igyr = filtIMUsig(igyr,gyr_cut,IMUtime)
-        tmp_edge_dwn,tmp_edge_up = findEdgeAng_gyr(igyr[:,2],IMUtime,ipeaks)
+        tmp_edge_dwn,tmp_edge_up,tmp_RAD_dwn,tmp_RADt_dwn,tmp_edgeangt_dwn_gyr = findEdgeAng_gyr(igyr[:,2],IMUtime,ipeaks)
         edgeang_dwn_gyr.extend(tmp_edge_dwn)
         edgeang_up_gyr.extend(tmp_edge_up)
+        RAD_dwn.extend(tmp_RAD_dwn)
+        RADt_dwn.extend(tmp_RADt_dwn)
+        edgeangt_dwn_gyr.extend(tmp_edgeangt_dwn_gyr)
+        
+        freq50fft_tmp = fft_50cutoff(iacc[:,1],ipeaks,IMUtime)
+        freq50fft.extend(freq50fft_tmp)
+        
         # Appending names
         if Lentries[ii].count('03399'):
             Side = Side + ['R']*len(tmp_edge_dwn)
@@ -258,11 +335,15 @@ np.save(fPath+'TrialSeg.npy',trial_segment)
 
 # Save the outcome metrics
 outcomes = pd.DataFrame({'Subject':list(sName),'Config':list(cName),'TrialNo':list(TrialNo),'Side': list(Side),
-                                 'edgeang_dwn_gyr':list(edgeang_dwn_gyr), 'edgeang_up_gyr':list(edgeang_up_gyr)
+                                 'edgeang_dwn_gyr':list(edgeang_dwn_gyr), 'edgeang_up_gyr':list(edgeang_up_gyr),
+                                 'RAD_dwn':list(RAD_dwn),'RADt_dwn':list(RADt_dwn), 'edgeangt_dwn_gyr':list(edgeangt_dwn_gyr),
+                                 'freq50fft': list(freq50fft) 
                                  })  
 
 if save_on == 1:
-    outcomes.to_csv(fPath+'IMUOutcomes_FBS.csv', header=True, index = False)
+    outcomes.to_csv(fPath+'IMUOutcomes2.csv', header=True, index = False)
+elif save_on == 2:
+    outcomes.to_csv(fPath+'IMUOutcomes2.csv', mode='a', header=False, index = False)
 
 
 
