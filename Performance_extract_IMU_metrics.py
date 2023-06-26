@@ -385,11 +385,11 @@ for ii in range(0,len(Lentries)):
     Ldf = pd.read_csv(fPath + Lentries[ii],sep=',', header = 0)
     Hdf = pd.read_csv(fPath + Hentries[ii],sep=',', header = 0)
     # Save trial information
-    Subject = Lentries[ii].split(sep = "-")[0]
-    Config = Lentries[ii].split(sep="-")[1]
-    Speed = Lentries[ii].split(sep="-")[2]
-    Slope = Lentries[ii].split(sep="-")[3]
-    Sesh = Lentries[ii].split(sep="-")[4][0]
+    Subject = Lentries[ii].split(sep = "-")[1]
+    Config = Lentries[ii].split(sep="-")[2]
+    # Speed = Lentries[ii].split(sep="-")[2]
+    # Slope = Lentries[ii].split(sep="-")[3]
+    # Sesh = Lentries[ii].split(sep="-")[4][0]
     
 
     
@@ -479,12 +479,12 @@ for ii in range(0,len(Lentries)):
         oSubject = oSubject + [Subject]*len(iGS)
         oConfig = oConfig + [Config]*len(iGS)
         # oLabel = oLabel + [Label]*len(iGS)
-        setting = setting + ['0']*len(iGS)
-        oSesh = oSesh + [Sesh]*len(iGS)
-        if Slope[0] == 'n':
-            oSide = oSide + ['L']*len(iGS)
-        else: 
-            oSide = oSide + ['R']*len(iGS)
+        # setting = setting + ['0']*len(iGS)
+        oSesh = oSesh + [1]*len(iGS)
+        # if Slope[0] == 'n':
+        #     oSide = oSide + ['L']*len(iGS)
+        # else: 
+        #     oSide = oSide + ['R']*len(iGS)
     
     # Clear variables
     iHS = []; iGS = []
