@@ -242,8 +242,8 @@ def rot2gravity(timeseries, HS, MS, GS):
         #jj = GS[count]
         
         jjn = GS[count +1]
-        acc_stride_plus = timeseries[HS[jj]:MS[jjn],1:4]
-        gyr_stride_plus = timeseries[HS[jj]:MS[jjn], 4:7]
+        acc_stride_plus = timeseries[HS[jj]:MS[jjn],4:7]
+        gyr_stride_plus = timeseries[HS[jj]:MS[jjn], 1:4]
         time_stride_plus = timeseries[HS[jj]:MS[jjn],1]
         
         
@@ -310,15 +310,15 @@ def rot2gravity(timeseries, HS, MS, GS):
 ### Import mocap data (for example)
 
 
-fPath = 'C:/Users/Kate.Harrison/Boa Technology Inc/PFL Team - General/Testing Segments/EndurancePerformance/EH_Trail_HeelLockTrail_Perf_May23/IMU/'
+fPath = 'C:/Users/Kate.Harrison/Boa Technology Inc/PFL Team - General/Testing Segments/EndurancePerformance/TrailRun_2022/OutdoorData/IMUData/'
 
-GPStiming = pd.read_csv('C:/Users/Kate.Harrison/Boa Technology Inc/PFL Team - General/Testing Segments/EndurancePerformance/EH_Trail_HeelLockTrail_Perf_May23/Watch/CombinedGPS.csv')
+GPStiming = pd.read_csv('C:/Users/Kate.Harrison/Boa Technology Inc/PFL Team - General/Testing Segments/EndurancePerformance/TrailRun_2022/OutdoorData/CombinedGPS.csv')
 
 # Hentries_pelvis = [fName for fName in os.listdir(fPath) if fName.endswith('highg.csv') and fName.count('03399') ]
 # Lentries_pelvis = [fName for fName in os.listdir(fPath) if fName.endswith('lowg.csv') and fName.count('03399')]
 
-Hentries_foot = [fName for fName in os.listdir(fPath) if fName.endswith('highg.csv') and fName.count('03399') ]
-Lentries_foot = [fName for fName in os.listdir(fPath) if fName.endswith('lowg.csv') and fName.count('03399')]
+Hentries_foot = [fName for fName in os.listdir(fPath) if fName.endswith('highg.csv') and fName.count('00218') ]
+Lentries_foot = [fName for fName in os.listdir(fPath) if fName.endswith('lowg.csv') and fName.count('00218')]
 
 
 
