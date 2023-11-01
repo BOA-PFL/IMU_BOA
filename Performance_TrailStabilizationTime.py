@@ -3,6 +3,8 @@
 Created on Wed Oct 12 14:00:47 2022
 
 @author: Eric.Honert
+
+Code to compute time to stablize with IMU on in lab trail
 """
 
 # Import Libraries
@@ -18,7 +20,7 @@ import addcopyfighandler
 from tkinter import messagebox
 
 # Obtain IMU signals
-fPath = 'C:\\Users\\eric.honert\\Boa Technology Inc\\PFL Team - General\\Testing Segments\\WorkWear_Performance\\EH_Workwear_MidCutStabilityI_CPDMech_June23\\IMU\\'
+fPath = 'Z:\\Testing Segments\\WorkWear_Performance\\EH_Workwear_MidCutStabilityI_CPDMech_June23\\IMU\\'
 
 save_on = 1
 debug = 0
