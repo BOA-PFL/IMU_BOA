@@ -2,7 +2,7 @@
 """
 Created on Mon Nov 21 17:04:52 2022
 
-Code to examine angles provided by vicon IMUs
+Code to examine angles provided by vicon IMUs for snowboard
 
 @author: Eric.Honert
 """
@@ -22,7 +22,7 @@ import addcopyfighandler
 from tkinter import messagebox
 
 # Obtain IMU signals
-fPath = 'C:/Users/Kate.Harrison/Boa Technology Inc/PFL Team - General/Testing Segments/Snow Performance/PFLMechanistic_StepOn_March2023/IMUData/'
+fPath = 'Z:/Testing Segments/Snow Performance/PFLMechanistic_StepOn_March2023/IMUData/'
 
 # Global variables
 # Filtering
@@ -189,7 +189,7 @@ for l in Lentries:
     elif '03391' in l:
         Lentries_boot.append(l)
         
-bindingDat = pd.read_excel('C:/Users/Kate.Harrison/Boa Technology Inc/PFL Team - General/Testing Segments/Snow Performance/PFLMechanistic_StepOn_March2023/QualData.xlsx', 'Qual')
+bindingDat = pd.read_excel('Z:/Testing Segments/Snow Performance/PFLMechanistic_StepOn_March2023/QualData.xlsx', 'Qual')
 bindingDat = bindingDat.iloc[:,:5].dropna()
 bindingDat['Subject'] = bindingDat['Subject'].str.replace(' ', '')
 

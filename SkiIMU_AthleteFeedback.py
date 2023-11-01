@@ -2,7 +2,15 @@
 """
 Created on Fri Jan  6 14:26:37 2023
 
+
+
 @author: Eric.Honert
+
+Notes: 
+    
+    Compute IMU metrics for Ski for one subject at a time
+
+
 """
 
 # Import Libraries

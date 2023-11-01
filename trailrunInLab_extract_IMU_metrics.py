@@ -4,6 +4,10 @@ Created on Wed Apr 13 13:01:41 2022
 
 @author: Eric.Honert
 
+
+NOTES:
+    
+    This code obtains all imu metrics when running on treadmill
 """
 
 # Import Libraries

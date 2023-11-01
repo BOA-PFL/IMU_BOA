@@ -2,7 +2,7 @@
 """
 Created on Mon Nov 21 17:04:52 2022
 
-Code to examine angles provided by vicon IMUs
+Code to examine angles provided by vicon IMUs for ski validation
 
 @author: Eric.Honert
 """
@@ -22,7 +22,7 @@ import addcopyfighandler
 from tkinter import messagebox
 
 # Obtain IMU signals
-fPath = 'C:\\Users\\eric.honert\\Boa Technology Inc\\PFL Team - General\\Testing Segments\\Snow Performance\\SkiValidation_Dec2022\\IMU\\'
+fPath = 'Z:\\Testing Segments\\Snow Performance\\SkiValidation_Dec2022\\IMU\\'
 
 # Global variables
 # Filtering
