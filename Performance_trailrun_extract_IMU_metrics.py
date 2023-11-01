@@ -5,9 +5,13 @@ Created on Wed Apr 13 13:01:41 2022
 @author: Eric.Honert
 
 Notes:
+    This code is for trail run IMU Metrics on outdoor red rocks trail
+    
     This code should only be run after extracting metrics from the GPS watch
     
     This code is only good for computing metrics from 1 IMU
+    
+    
 """
 
 # Import Libraries
@@ -25,9 +29,9 @@ import addcopyfighandler
 from tkinter import messagebox
 
 # Grab the GPS data for the timing of segments
-GPStiming = pd.read_csv('C:\\Users\eric.honert\\Boa Technology Inc\\PFL Team - General\\Testing Segments\\EndurancePerformance\\EH_Trail_HeelLockTrail_Perf_May23\\Watch\\CombinedGPS.csv')
+GPStiming = pd.read_csv('Z:\\EndurancePerformance\\EH_Trail_HeelLockTrail_Perf_May23\\Watch\\CombinedGPS.csv')
 # Obtain IMU signals
-fPath = 'C:\\Users\\eric.honert\\Boa Technology Inc\\PFL Team - General\\Testing Segments\\EndurancePerformance\\EH_Trail_HeelLockTrail_Perf_May23\\IMU\\'
+fPath = 'Z:\\Testing Segments\\EndurancePerformance\\EH_Trail_HeelLockTrail_Perf_May23\\IMU\\'
 
 save_on = 1
 debug = 0
