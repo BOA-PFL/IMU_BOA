@@ -49,7 +49,7 @@ def align_fuse_extract_IMU_angles(LGdat,HGdat):
         low-g data frame that is extracted as raw data from Capture.U. This
         dataframe contains both the low-g accelerometer and the gyroscope.
     HGdat : dataframe
-        low-g data frame that is extracted as raw data from Capture.U.
+        high-g data frame that is extracted as raw data from Capture.U.
 
     Returns
     -------
@@ -201,7 +201,7 @@ for ii in range(0,len(Lentries_board)):
     print(Lentries_board[ii])
     # Extract trial information
     tmpsName = Lentries_board[ii].split(sep = "-")[0]
-    tmpDir = Lentries_board[ii].split(sep = '-')[1]
+    tmpDir = Lentries_board[ii].split(sep = '-')[1] # Regular or Goofy
     tmpConfig = Lentries_board[ii].split(sep = "-")[2]
     tmpTrialNo = Lentries_board[ii].split(sep = "-")[3][0]
     
