@@ -2,7 +2,7 @@
 """
 Created on Mon Nov 21 17:04:52 2022
 
-Code to examine angles provided by vicon IMUs
+Code to examine angles provided by vicon IMUs for ski
 
 @author: Eric.Honert
 """
@@ -219,8 +219,8 @@ trial_name = []
 edgeang_dwn_gyr = []
 RAD_dwn = [] # Rate of angle development
 RADt_dwn = [] # Time corresponding to rate of angle development
-edgeangt_dwn_gyr = []
-edgeang_up_gyr = []
+edgeangt_dwn_gyr = [] #Edge angle on downhill ski
+edgeang_up_gyr = [] #Edge angle of uphill ski
 freq50fft = []
 
 sName = []

@@ -2,6 +2,10 @@
 """
 Created on Fri Jan  6 14:26:37 2023
 
+Notes:
+    
+    Code for analyzing ski IMU metrics for one person at a time
+
 @author: Eric.Honert
 """
 
