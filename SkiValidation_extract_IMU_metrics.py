@@ -24,7 +24,6 @@ from tkinter import messagebox
 # Obtain IMU signals
 fPath = 'C:/Users/eric.honert/Boa Technology Inc/PFL Team - General/Testing Segments/Snow Performance/EH_Alpine_FullBootvsShell_Mech_Jan2024/IMU/'
 
-
 # Global variables
 # Filtering
 acc_cut = 10
@@ -52,7 +51,7 @@ def align_fuse_extract_IMU_angles(LGdat,HGdat):
         low-g data frame that is extracted as raw data from Capture.U. This
         dataframe contains both the low-g accelerometer and the gyroscope.
     HGdat : dataframe
-        low-g data frame that is extracted as raw data from Capture.U.
+        high-g data frame that is extracted as raw data from Capture.U.
 
     Returns
     -------
@@ -259,8 +258,9 @@ for ii in range(len(Lentries)):
     [IMUtime,iacc,igyr,iang] = align_fuse_extract_IMU_angles(Ldf,Hdf)
     # Convert the time
     IMUtime = (IMUtime - IMUtime[0])*(1e-6)
-       
+    
     if Lentries[ii].count(RIMUno):
+
         # For the right gyro, invert the roll
         print('Right IMU')
         igyr[:,2] = -igyr[:,2] 
@@ -343,10 +343,12 @@ outcomes = pd.DataFrame({'Subject':list(sName),'Config':list(cName),'TrialNo':li
                                  'freq50fft': list(freq50fft) 
                                  })  
 
+outfileName = fPath+'IMUOutcomes2.csv'
 if save_on == 1:
-    outcomes.to_csv(fPath+'0_IMUOutcomes2.csv', header=True, index = False)
-elif save_on == 2:
-    outcomes.to_csv(fPath+'0_IMUOutcomes2.csv', mode='a', header=False, index = False)
+    if os.path.exists(outfileName) == False:
+    
+        outcomes.to_csv(outfileName, header=True, index = False)
 
-
+    else:
+        outcomes.to_csv(outfileName, mode='a', header=False, index = False) 
 
