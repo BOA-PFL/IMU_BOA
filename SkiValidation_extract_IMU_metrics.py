@@ -22,7 +22,8 @@ import addcopyfighandler
 from tkinter import messagebox
 
 # Obtain IMU signals
-fPath = 'C:\\Users\\eric.honert\\Boa Technology Inc\\PFL Team - General\\Testing Segments\\Snow Performance\\SkiValidation_Dec2022\\IMU\\'
+fPath = 'C:/Users/eric.honert/Boa Technology Inc/PFL Team - General/Testing Segments/Snow Performance/EH_Alpine_FullBootvsShell_Mech_Jan2024/IMU/'
+
 
 # Global variables
 # Filtering
@@ -30,8 +31,10 @@ acc_cut = 10
 gyr_cut = 6
 
 # Debugging variables
-debug = 1
-save_on = 0
+debug = 0
+save_on = 1
+
+RIMUno = '04116'
 
 # Functions
 def align_fuse_extract_IMU_angles(LGdat,HGdat):
@@ -188,11 +191,11 @@ def fft_50cutoff(var,landings,t):
     # Index through the strides
     for ii in range(len(landings)-1):
         # Zero-Pad the Variable
-        intp_var = np.zeros(5000)
+        intp_var = np.zeros(7000)
         intp_var[0:landings[ii+1]-landings[ii]] = var[landings[ii]:landings[ii+1]]
         fft_out = fft(intp_var)
         
-        xf = fftfreq(5000,1/freq)
+        xf = fftfreq(7000,1/freq)
         # Only look at the positive
         idx = xf > 0
         fft_out = abs(fft_out[idx])
@@ -241,7 +244,7 @@ Hentries = [fName for fName in os.listdir(fPath) if fName.endswith('highg.csv')]
 Lentries = [fName for fName in os.listdir(fPath) if fName.endswith('lowg.csv')]
 
 
-for ii in range(223,len(Lentries)):
+for ii in range(len(Lentries)):
     # Grab the .csv files
     print(Lentries[ii])
     # Extract trial information
@@ -257,7 +260,7 @@ for ii in range(223,len(Lentries)):
     # Convert the time
     IMUtime = (IMUtime - IMUtime[0])*(1e-6)
        
-    if Lentries[ii].count('03399'):
+    if Lentries[ii].count(RIMUno):
         # For the right gyro, invert the roll
         print('Right IMU')
         igyr[:,2] = -igyr[:,2] 
@@ -320,7 +323,7 @@ for ii in range(223,len(Lentries)):
         freq50fft.extend(freq50fft_tmp)
         
         # Appending names
-        if Lentries[ii].count('03399'):
+        if Lentries[ii].count(RIMUno):
             Side = Side + ['R']*len(tmp_edge_dwn)
         else:
             Side = Side + ['L']*len(tmp_edge_dwn)
@@ -341,9 +344,9 @@ outcomes = pd.DataFrame({'Subject':list(sName),'Config':list(cName),'TrialNo':li
                                  })  
 
 if save_on == 1:
-    outcomes.to_csv(fPath+'IMUOutcomes2.csv', header=True, index = False)
+    outcomes.to_csv(fPath+'0_IMUOutcomes2.csv', header=True, index = False)
 elif save_on == 2:
-    outcomes.to_csv(fPath+'IMUOutcomes2.csv', mode='a', header=False, index = False)
+    outcomes.to_csv(fPath+'0_IMUOutcomes2.csv', mode='a', header=False, index = False)
 
 
 
