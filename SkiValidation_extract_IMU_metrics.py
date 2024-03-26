@@ -22,7 +22,7 @@ import addcopyfighandler
 from tkinter import messagebox
 
 # Obtain IMU signals
-fPath = 'C:/Users/Kate.Harrison/Boa Technology Inc/PFL Team - General/Testing Segments/Snow Performance/EH_Alpine_FullBootvsShell_Mech_Jan2024/IMU/'
+fPath = 'C:/Users/eric.honert/Boa Technology Inc/PFL Team - General/Testing Segments/Snow Performance/EH_Alpine_FullBootvsShell_Mech_Jan2024/IMU/'
 
 # Global variables
 # Filtering
@@ -30,8 +30,10 @@ acc_cut = 10
 gyr_cut = 6
 
 # Debugging variables
-debug = 1
-save_on = 0
+debug = 0
+save_on = 1
+
+RIMUno = '04116'
 
 # Functions
 def align_fuse_extract_IMU_angles(LGdat,HGdat):
@@ -49,7 +51,7 @@ def align_fuse_extract_IMU_angles(LGdat,HGdat):
         low-g data frame that is extracted as raw data from Capture.U. This
         dataframe contains both the low-g accelerometer and the gyroscope.
     HGdat : dataframe
-        low-g data frame that is extracted as raw data from Capture.U.
+        high-g data frame that is extracted as raw data from Capture.U.
 
     Returns
     -------
@@ -188,11 +190,11 @@ def fft_50cutoff(var,landings,t):
     # Index through the strides
     for ii in range(len(landings)-1):
         # Zero-Pad the Variable
-        intp_var = np.zeros(6000)
+        intp_var = np.zeros(7000)
         intp_var[0:landings[ii+1]-landings[ii]] = var[landings[ii]:landings[ii+1]]
         fft_out = fft(intp_var)
         
-        xf = fftfreq(6000,1/freq)
+        xf = fftfreq(7000,1/freq)
         # Only look at the positive
         idx = xf > 0
         fft_out = abs(fft_out[idx])
@@ -256,8 +258,9 @@ for ii in range(len(Lentries)):
     [IMUtime,iacc,igyr,iang] = align_fuse_extract_IMU_angles(Ldf,Hdf)
     # Convert the time
     IMUtime = (IMUtime - IMUtime[0])*(1e-6)
-       
-    if Lentries[ii].count('04114'):
+    
+    if Lentries[ii].count(RIMUno):
+
         # For the right gyro, invert the roll
         print('Right IMU')
         igyr[:,2] = -igyr[:,2] 
@@ -320,7 +323,7 @@ for ii in range(len(Lentries)):
         freq50fft.extend(freq50fft_tmp)
         
         # Appending names
-        if Lentries[ii].count('04116'):
+        if Lentries[ii].count(RIMUno):
             Side = Side + ['R']*len(tmp_edge_dwn)
         else:
             Side = Side + ['L']*len(tmp_edge_dwn)
@@ -339,7 +342,6 @@ outcomes = pd.DataFrame({'Subject':list(sName),'Config':list(cName),'TrialNo':li
                                  'RAD_dwn':list(RAD_dwn),'RADt_dwn':list(RADt_dwn), 'edgeangt_dwn_gyr':list(edgeangt_dwn_gyr),
                                  'freq50fft': list(freq50fft) 
                                  })  
-
 
 outfileName = fPath+'IMUOutcomes2.csv'
 if save_on == 1:

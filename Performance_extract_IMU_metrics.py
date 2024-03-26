@@ -23,7 +23,7 @@ from tkinter import messagebox
 
 
 # Obtain IMU signals
-fPath = 'C:\\Users\\eric.honert\\Boa Technology Inc\\PFL Team - General\\Testing Segments\\WorkWear_Performance\\EH_Workwear_MidCutStabilityI_CPDMech_June23\\IMU\\'
+fPath = 'Z:\\Testing Segments\\WorkWear_Performance\\EH_Workwear_MidCutStabilityII_CPDMech_Sept23_AnkPress\\IMU\\'
 
 save_on = 1
 debug = 0
@@ -495,6 +495,6 @@ outcomes = pd.DataFrame({'Subject':list(oSubject), 'Config': list(oConfig),
 
 
 if save_on == 1:
-    outcomes.to_csv(fPath+'CompIMUmetrics.csv',header=True,index=False)
+    outcomes.to_csv(fPath+'0_CompIMUmetrics.csv',header=True,index=False)
 
 

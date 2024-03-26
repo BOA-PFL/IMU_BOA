@@ -25,9 +25,9 @@ import addcopyfighandler
 from tkinter import messagebox
 
 # Grab the GPS data for the timing of segments
-GPStiming = pd.read_csv('C:\\Users\eric.honert\\Boa Technology Inc\\PFL Team - General\\Testing Segments\\EndurancePerformance\\EH_Trail_HeelLockTrail_Perf_May23\\Watch\\CombinedGPS.csv')
+GPStiming = pd.read_csv('Z:\\Testing Segments\\EndurancePerformance\\EH_Trail_HeelLockTrail_Perf_May23\\Watch\\CombinedGPS.csv')
 # Obtain IMU signals
-fPath = 'C:\\Users\\eric.honert\\Boa Technology Inc\\PFL Team - General\\Testing Segments\\EndurancePerformance\\EH_Trail_HeelLockTrail_Perf_May23\\IMU\\'
+fPath = 'Z:\\Testing Segments\\EndurancePerformance\\EH_Trail_HeelLockTrail_Perf_May23\\IMU\\'
 
 save_on = 1
 debug = 0
@@ -52,7 +52,7 @@ def align_fuse_extract_IMU(LGdat,HGdat):
         low-g data frame that is extracted as raw data from Capture.U. This
         dataframe contains both the low-g accelerometer and the gyroscope.
     HGdat : dataframe
-        low-g data frame that is extracted as raw data from Capture.U.
+        high-g data frame that is extracted as raw data from Capture.U.
 
     Returns
     -------
