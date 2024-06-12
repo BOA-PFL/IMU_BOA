@@ -23,14 +23,14 @@ from tkinter import messagebox
 
 
 # Obtain IMU signals
-fPath = 'Z:\\Testing Segments\\WorkWear_Performance\\EH_Workwear_MidCutStabilityII_CPDMech_Sept23_AnkPress\\IMU\\'
+fPath = 'C:\\Users\\bethany.kilpatrick\\Boa Technology Inc\\PFL - General\\Testing Segments\\Hike\\EH_Hike_MidcutSD_Mech_April2024\\IMU\\Trail\\steve\\'
 
 save_on = 1
-debug = 0
+debug = 1
 
 # High and Low G accelerometers: note that the gyro is in the low G file
-Hentries = [fName for fName in os.listdir(fPath) if fName.endswith('highg.csv') and fName.count('-Trail') and fName.count('03391')]
-Lentries = [fName for fName in os.listdir(fPath) if fName.endswith('lowg.csv') and fName.count('-Trail') and fName.count('03391')]
+Hentries = [fName for fName in os.listdir(fPath) if fName.endswith('highg.csv') ] 
+Lentries = [fName for fName in os.listdir(fPath) if fName.endswith('lowg.csv')] 
 
 # Functions
 def align_fuse_extract_IMU(LGdat,HGdat):
@@ -362,7 +362,11 @@ oSesh = []
 oSpeed = []
 oLabel = []
 setting = []
-oSide = []
+oSide = [] 
+
+oMovement = []
+
+
 
 pGyr = []
 pAcc = []
@@ -379,14 +383,15 @@ acc_cut = 50
 gyr_cut = 30
 
 # Index through the low-g files
-for ii in range(0,len(Lentries)):
+for ii in range(len(Lentries)):
     print(Lentries[ii])
     # Load the trials here
     Ldf = pd.read_csv(fPath + Lentries[ii],sep=',', header = 0)
     Hdf = pd.read_csv(fPath + Hentries[ii],sep=',', header = 0)
     # Save trial information
-    Subject = Lentries[ii].split(sep = "-")[1]
-    Config = Lentries[ii].split(sep="-")[2]
+    Subject = Lentries[ii].split(sep = "-")[0]
+    Config = Lentries[ii].split(sep="-")[1] 
+    Movement = Lentries[ii].split(sep="-")[2]
     # Speed = Lentries[ii].split(sep="-")[2]
     # Slope = Lentries[ii].split(sep="-")[3]
     # Sesh = Lentries[ii].split(sep="-")[4][0]
@@ -449,6 +454,16 @@ for ii in range(0,len(Lentries)):
         plt.ylabel('Vertical Acceleration [m/s^2]')
         plt.xlabel('Time [sec]')
         answer = messagebox.askyesno("Question","Is data clean?")
+        saveFolder = fPath + 'IMU_2DPlots'
+        
+        if answer == True:
+            if os.path.exists(saveFolder) == False:
+                os.mkdir(saveFolder) 
+                
+            plt.savefig(saveFolder + '/' + Lentries[ii]  +'.png')
+         
+        
+       
         plt.close('all')
     
         if answer == False:
@@ -477,7 +492,9 @@ for ii in range(0,len(Lentries)):
             
         # Appending
         oSubject = oSubject + [Subject]*len(iGS)
-        oConfig = oConfig + [Config]*len(iGS)
+        oConfig = oConfig + [Config]*len(iGS) 
+        oMovement = oMovement + [Movement]*len(iGS)
+        
         # oLabel = oLabel + [Label]*len(iGS)
         # setting = setting + ['0']*len(iGS)
         oSesh = oSesh + [1]*len(iGS)
@@ -489,12 +506,12 @@ for ii in range(0,len(Lentries)):
     # Clear variables
     iHS = []; iGS = []
     
-outcomes = pd.DataFrame({'Subject':list(oSubject), 'Config': list(oConfig),
+outcomes = pd.DataFrame({'Subject':list(oSubject), 'Config': list(oConfig), 'Movement':list(oMovement),
                          'Sesh': list(oSesh), 'pJerk':list(pJerk),'pAcc':list(pAcc), 'pGyr':list(pGyr),
                            'rMLacc':list(rMLacc),'rIEgyro':list(rIEgyro),'pIEgyro':list(pIEgyro) ,'imuSpeed':list(imuSpeed)})
 
 
 if save_on == 1:
-    outcomes.to_csv(fPath+'0_CompIMUmetrics.csv',header=True,index=False)
+    outcomes.to_csv(fPath+'0_Trail_CompIMUmetrics.csv',header=True,index=False, mode = 'a')
 
 
