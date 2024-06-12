@@ -260,6 +260,8 @@ def computeRunSpeedIMU(acc,gyr,HS,MS,GS,t):
         slope = theta[-1,:]/(len(theta)-MS_idx-1)
         drift = (slope*np.ones([len(theta),3]))*(np.array([range(len(theta)),range(len(theta)),range(len(theta))])).T
         drift = drift-drift[MS_idx,:]
+        theta = theta - drift
+        
         # Gyro integration initial condition
         if count == 0:
            theta = theta-thetai
