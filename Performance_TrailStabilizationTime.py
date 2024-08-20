@@ -100,6 +100,7 @@ def filtIMUsig(sig_in,cut,t):
 # 
 oSubject = []
 oConfig = []
+oOrder = []
 
 stabalize_time = []
 badFileList = []
@@ -115,6 +116,7 @@ for ii in range(6,len(Lentries)):
     # Save trial information
     Subject = Lentries[ii].split(sep = "-")[1]
     Config = Lentries[ii].split(sep="-")[2]
+    Order = Lentries[ii].split(sep="-")[3] .split(sep="_")[0]
     
     # Fuse the low and high-g accelerometer data together
     igyr = np.array(Ldf.iloc[:,5:])
@@ -191,6 +193,7 @@ for ii in range(6,len(Lentries)):
             stabalize_time.append(IMUtime[loc_stabalize[count]]-IMUtime[land])
             oSubject.append(Subject)
             oConfig.append(Config)
+            oOrder.append(Order)
     
     
     
@@ -216,7 +219,7 @@ for ii in range(6,len(Lentries)):
         
     
 
-outcomes = pd.DataFrame({'Subject':list(oSubject), 'Config': list(oConfig),
+outcomes = pd.DataFrame({'Subject':list(oSubject), 'Config': list(oConfig),'Order': list(oOrder),
                           'StabalizeTime':list(stabalize_time)})
 
 if save_on == 1:
