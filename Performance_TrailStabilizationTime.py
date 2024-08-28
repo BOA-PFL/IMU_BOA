@@ -36,8 +36,6 @@ def estIMU_singleleg_landings(acc,t,HS_thresh):
     ----------
     acc : numpy array (Nx3)
         X,Y,Z acceleration from the IMU
-    gyr : numpy array (Nx3)
-        X,Y,Z gyroscope from the IMU
     t : numpy array (Nx1)
         time (seconds)
     thresh : float/int
@@ -47,8 +45,6 @@ def estIMU_singleleg_landings(acc,t,HS_thresh):
     -------
     HS : list
         Heel-strike (foot contact events) indices
-    MS : list
-        Mid-stance indices
 
     """
     
@@ -107,9 +103,10 @@ badFileList = []
 
 # Filtering frequencies
 gyr_cut = 5
+acc_cut = 10
 
 # Index through the low-g files
-for ii in range(6,len(Lentries)):
+for ii in range(0,len(Lentries)):
     print(Lentries[ii])
     # Load the trials here
     Ldf = pd.read_csv(fPath + Lentries[ii],sep=',', header = 0)
@@ -132,19 +129,26 @@ for ii in range(6,len(Lentries)):
     b, a = sig.butter(2, w, 'low')
     landing_sig = sig.filtfilt(b, a, np.linalg.norm(igyr,axis = 1))
 
+    igyr = filtIMUsig(igyr, gyr_cut, IMUtime)
+    igyr_mag = np.linalg.norm(igyr,axis = 1)
+    iacc = filtIMUsig(iacc, acc_cut, IMUtime)
+    iacc_mag = np.linalg.norm(iacc,axis = 1)
+
     # Find the landings from the filtered gyroscope data
     landings = []
     perc_peak = 0.5
     IT = 1
-    while len(landings) < 6 and IT < 6:
+    morefound = 12
+    
+    while len(landings) < 8 and IT < 8:
         landings,peakheights = scipy.signal.find_peaks(landing_sig[:-10000], distance = 5000,prominence = 200, height = perc_peak*np.max(landing_sig))
-        if len(landings) > 8:
+        if len(landings) > morefound:
             landings,peakheights = scipy.signal.find_peaks(landing_sig[:-10000], distance = 10000,prominence = 200, height = perc_peak*np.max(landing_sig))
         perc_peak = perc_peak - 0.1
         IT = IT + 1  
     
-    igyr = filtIMUsig(igyr, gyr_cut, IMUtime)
-    igyr_mag = np.linalg.norm(igyr,axis = 1)
+
+    
     
     # Create the steady-state threshold
     loc_max = []
@@ -179,6 +183,7 @@ for ii in range(6,len(Lentries)):
     if debug == 1:
         plt.figure(ii)
         plt.plot(IMUtime,igyr_mag)
+        plt.plot(IMUtime,iacc_mag)
         plt.plot(IMUtime[landings],igyr_mag[landings],'ko')
         plt.plot(IMUtime[loc_stabalize],igyr_mag[loc_stabalize],'mv')
         plt.xlabel('Time [sec]')
