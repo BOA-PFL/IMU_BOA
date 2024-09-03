@@ -8,6 +8,8 @@ Notes:
     This code should only be run after extracting metrics from the GPS watch
     
     This code is only good for computing metrics from 1 IMU
+    
+    Updated footdetection 6/12/24
 """
 
 # Import Libraries
@@ -25,16 +27,17 @@ import addcopyfighandler
 from tkinter import messagebox
 
 # Grab the GPS data for the timing of segments
-GPStiming = pd.read_csv('Z:\\Testing Segments\\EndurancePerformance\\EH_Trail_HeelLockTrail_Perf_May23\\Watch\\CombinedGPS.csv')
+GPStiming = pd.read_csv('C:\\Users\\milena.singletary\\Boa Technology Inc\\PFL Team - Documents\\General\\Testing Segments\\EndurancePerformance\\EH_Trail_Kailas_Perf_Jun24\\GPS\\CombinedGPS.csv')
 # Obtain IMU signals
-fPath = 'Z:\\Testing Segments\\EndurancePerformance\\EH_Trail_HeelLockTrail_Perf_May23\\IMU\\'
+#fPath = 'Z:\\Testing Segments\\EndurancePerformance\\EH_Trail_HeelLockTrail_Perf_May23\\IMU\\'
+fPath = 'C:\\Users\\milena.singletary\\Boa Technology Inc\\PFL Team - Documents\\General\\Testing Segments\\EndurancePerformance\\EH_Trail_Kailas_Perf_Jun24\\IMU\\'
 
 save_on = 1
-debug = 0
+debug = 1
 
 # Right High and Low G accelerometers: note that the gyro is in the low G file
-RHentries = [fName for fName in os.listdir(fPath) if fName.endswith('highg.csv') and fName.count('03399')]
-RLentries = [fName for fName in os.listdir(fPath) if fName.endswith('lowg.csv') and fName.count('03399')]
+RHentries = [fName for fName in os.listdir(fPath) if fName.endswith('highg.csv') and fName.count('04116')] # updated IMU number for infield collections
+RLentries = [fName for fName in os.listdir(fPath) if fName.endswith('lowg.csv') and fName.count('04116')]
 
 # Functions
 def align_fuse_extract_IMU(LGdat,HGdat):
@@ -140,28 +143,42 @@ def estIMU_HS_MS(acc,gyr,t):
     HS_sig = (np.gradient(np.linalg.norm(acc,axis=1),t))**2
     gyr_energy = (np.linalg.norm(gyr,axis=1))**2
     # Create a midstance detection signal
-    idx = np.linalg.norm(acc,axis = 1) > 2.5*9.81 # Only want values above 2g as they will be excluded, may need to reduce this threshold
     MS_sig = gyr_energy
-    MS_sig[idx] = 1e6
+    # idx = np.linalg.norm(acc,axis = 1) > 2.5*9.81 # Only want values above 2g as they will be excluded, may need to reduce this threshold
+    # MS_sig[idx] = 1e6
     
+    # Set up a 2nd order 50 Hz low pass buttworth filter
+    freq = 1/np.mean(np.diff(t))
+    w = 50 / (freq / 2) # Normalize the frequency
+    b, a = sig.butter(2, w, 'low')
     
+    # Filter the IMU signals
+    acc_filt = np.array([sig.filtfilt(b, a, acc[:,jj]) for jj in range(3)]).T
+
     window = 200
     jj = 200
+    
+    apsig = acc_filt[:,2]
+    APsum_thresh = 1500
     
     HS = []
     # MS = []
     
     while jj < len(HS_sig)-1000:
-        if HS_sig[jj] > 5e8:
-            # Find the maximum
-            HS_idx = np.argmin(acc[jj-window:jj+window,0])
-            HS.append(jj-window+HS_idx)
-            jj = jj+500
+        if HS_sig[jj] > 5e7:
+            if sum(abs(apsig[jj-200:jj])) > APsum_thresh:
+                # Find the maximum
+                HS_idx = np.argmin(acc[jj-window:jj+window,0])
+                HS.append(jj-window+HS_idx)
+                jj = jj-window+HS_idx+300
         jj = jj+1
-            
-    HS = np.array(HS[:-1])
+      
+    
+    HS = np.unique(HS)        
+    HS = np.array(HS[:-1])    
+
     # Compute the mid-stance indicies
-    MS = np.array([(np.argmin(MS_sig[HS[jj]+10:HS[jj]+int((HS[jj+1]-HS[jj])*0.2)])+HS[jj]+10)  for jj in range(len(HS)-1)]) 
+    MS = np.array([(np.argmin(MS_sig[HS[jj]:HS[jj]+int((HS[jj+1]-HS[jj])*0.5)])+HS[jj])  for jj in range(len(HS)-1)]) 
     # MS = []
     # for jj in range(len(HS)-1):
     #     print(jj)
@@ -243,6 +260,8 @@ def computeRunSpeedIMU(acc,gyr,HS,MS,GS,t):
         slope = theta[-1,:]/(len(theta)-MS_idx-1)
         drift = (slope*np.ones([len(theta),3]))*(np.array([range(len(theta)),range(len(theta)),range(len(theta))])).T
         drift = drift-drift[MS_idx,:]
+        theta = theta - drift
+        
         # Gyro integration initial condition
         if count == 0:
            theta = theta-thetai
@@ -367,7 +386,7 @@ gyr_cut = 30
 # Index through the GPS file as that has all entries possible
 for ii in range(0,len(GPStiming)):
     # Find the correct files if there
-    GPSstr = GPStiming.Subject[ii] + '-' + GPStiming.Config[ii] + '-1'
+    GPSstr = GPStiming.Subject[ii] + '-' + GPStiming.Config[ii] + '-Trail-'  + str(ii+1)
     
     # Check to make sure there is an IMU trial for for the selected GPS trial 
     GoodTrial = 0; Rtrial = []

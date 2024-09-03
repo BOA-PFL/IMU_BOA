@@ -255,6 +255,7 @@ def computeRunSpeedIMU(acc,gyr,HS,MS,GS,t):
         slope = theta[-1,:]/(len(theta)-MS_idx-1)
         drift = (slope*np.ones([len(theta),3]))*(np.array([range(len(theta)),range(len(theta)),range(len(theta))])).T
         drift = drift-drift[MS_idx,:]
+        theta = theta - drift
         # Gyro integration initial condition
         if count == 0:
            theta = theta-thetai
@@ -394,7 +395,7 @@ for ii in range(len(Lentries)):
     Movement = Lentries[ii].split(sep="-")[2]
     # Speed = Lentries[ii].split(sep="-")[2]
     # Slope = Lentries[ii].split(sep="-")[3]
-    # Sesh = Lentries[ii].split(sep="-")[4][0]
+    Sesh = Lentries[ii].split(sep="-")[3][0]
     
 
     
@@ -497,7 +498,7 @@ for ii in range(len(Lentries)):
         
         # oLabel = oLabel + [Label]*len(iGS)
         # setting = setting + ['0']*len(iGS)
-        oSesh = oSesh + [1]*len(iGS)
+        oSesh = oSesh + [Sesh]*len(iGS)
         # if Slope[0] == 'n':
         #     oSide = oSide + ['L']*len(iGS)
         # else: 
