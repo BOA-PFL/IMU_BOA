@@ -22,7 +22,7 @@ import addcopyfighandler
 from tkinter import messagebox
 
 # Obtain IMU signals
-fPath = 'C:/Users/Kate.Harrison/Boa Technology Inc/PFL Team - General/Testing Segments/Snow Performance/PFLMechanistic_StepOn_March2023/IMUData/'
+fPath = 'C:\\Users\\Kate.Harrison\\Boa Technology Inc\\PFL Team - General\\Testing Segments\\Snow Performance\\EH_Snowboard_BurtonWrap_Perf_Dec2024\\IMU\\'
 
 # Global variables
 # Filtering
@@ -30,8 +30,8 @@ acc_cut = 1
 gyr_cut = 1
 
 # Debugging variables
-debug = 1
-save_on = 0
+debug = 0
+save_on = 1
 
 # Functions
 def align_fuse_extract_IMU_angles(LGdat,HGdat):
@@ -176,34 +176,34 @@ Lentries = [fName for fName in os.listdir(fPath) if fName.endswith('lowg.csv')]
 Hentries_board = []
 Hentries_boot = []
 for h in Hentries: 
-    if '03399' in h:
+    if ('04116' in h or '03399' in h or '04580' in h):
         Hentries_board.append(h)
-    elif '03391' in h:
+    elif '04241' in h:
         Hentries_boot.append(h)
         
 Lentries_board = []
 Lentries_boot = []
 for l in Lentries: 
-    if '03399' in l:
+    if ('04116' in l or '03399' in l or '04580' in l):
         Lentries_board.append(l)
-    elif '03391' in l:
+    elif '04241' in l:
         Lentries_boot.append(l)
         
-bindingDat = pd.read_excel('C:/Users/Kate.Harrison/Boa Technology Inc/PFL Team - General/Testing Segments/Snow Performance/PFLMechanistic_StepOn_March2023/QualData.xlsx', 'Qual')
+bindingDat = pd.read_excel('C:\\Users\\Kate.Harrison\\Boa Technology Inc\\PFL Team - General\\Testing Segments\\Snow Performance\\EH_Snowboard_BurtonWrap_Perf_Dec2024/QualData.xlsx', 'Qual')
 bindingDat = bindingDat.iloc[:,:5].dropna()
 bindingDat['Subject'] = bindingDat['Subject'].str.replace(' ', '')
 
 
-for ii in range(0,len(Lentries_board)):
+for ii in range(len(Lentries_board)):
     # Grab the .csv files
     
-    #ii = 6
+    #ii = 0
     print(Lentries_board[ii])
     # Extract trial information
-    tmpsName = Lentries_board[ii].split(sep = "-")[0]
-    tmpDir = Lentries_board[ii].split(sep = '-')[1] # Regular or Goofy
-    tmpConfig = Lentries_board[ii].split(sep = "-")[2]
-    tmpTrialNo = Lentries_board[ii].split(sep = "-")[3][0]
+    tmpsName = Lentries_board[ii].split(sep = "-")[1]
+    tmpDir = Lentries_board[ii].split(sep = '-')[2] # Regular or Goofy
+    tmpConfig = Lentries_board[ii].split(sep = "-")[3]
+    tmpTrialNo = Lentries_board[ii].split(sep = "-")[4][0]
     
     Ldf_board = pd.read_csv(fPath + Lentries_board[ii],sep=',', header = 0)
     Ldf_boot = pd.read_csv(fPath + Lentries_boot[ii], sep = ',', header = 0)
@@ -314,7 +314,11 @@ for ii in range(0,len(Lentries_board)):
         boardAng_heel.extend(tmp_boardheel)
         
         
-        rearAng = bindingDat[bindingDat.Subject == tmpsName].reset_index()['RearBindingAngle'][0] * 0.0174533
+        try:
+            rearAng = bindingDat[bindingDat.Subject == tmpsName].reset_index()['RearBindingAngle'][0] * 0.0174533
+            
+        except:
+            rearAng = 0
         
        
         #roll_ang = cumtrapz(gyr_roll[turn_idx[jj]:turn_idx[jj+1]],t[turn_idx[jj]:turn_idx[jj+1]],initial=0,axis=0)
@@ -372,8 +376,14 @@ outcomes = pd.DataFrame({'Subject':list(sName),'Config':list(cName),'TrialNo':li
                          'BoardAngle_ToeTurns':list(boardAng_toe), 'BoardAngle_HeelTurns':list(boardAng_heel), 
                          'BootFlex':list(boot_flex)})  
 
+outfileName = 'C:\\Users\\Kate.Harrison\\Boa Technology Inc\\PFL Team - General\\Testing Segments\\Snow Performance\\EH_Snowboard_BurtonWrap_Perf_Dec2024\\IMU\\IMUOutcomes.csv'
 if save_on == 1:
-    outcomes.to_csv(fPath+'IMUOutcomes.csv', header=True, index = False)
+    if os.path.exists(outfileName) == False:
+        
+        outcomes.to_csv(outfileName, header=True, index = False)
+
+    else:
+        outcomes.to_csv(outfileName, mode='a', header=False, index = False) 
 
 
 

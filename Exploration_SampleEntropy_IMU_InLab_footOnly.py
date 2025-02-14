@@ -210,7 +210,10 @@ def findRotToLab(accel_vec):
     theta = theta*180/np.pi
     return theta
 
-def rot2gravity(timeseries, HS, MS, GS):
+
+
+
+def rot2gravity_foot(timeseries, HS, MS, GS):
     """
     Function to find the rotation of the foot flat acceleration vector to the 
     defined lab gravity coordinate system.
@@ -227,7 +230,7 @@ def rot2gravity(timeseries, HS, MS, GS):
         coordinate system
 
     """
-    #timeseries = up
+    # timeseries = up_foot
     
     MS_frames = 20
     
@@ -238,8 +241,8 @@ def rot2gravity(timeseries, HS, MS, GS):
         # Obtain the acceleration and gyroscope from foot contact (HS) to the
         # subsiquent midstance (MS). MS is needed for linear drift correction
         
-        #count = 120
-        #jj = GS[count]
+        # count = 0
+        # jj = GS[count]
         
         jjn = GS[count +1]
         acc_stride_plus = timeseries[HS[jj]:MS[jjn],4:7]
@@ -251,19 +254,20 @@ def rot2gravity(timeseries, HS, MS, GS):
         MS_idx = MS[jj]-HS[jj]
         HS_idx = HS[jjn]-HS[jj]
         
-        Fflat_accel = np.mean(acc_stride_plus[MS_idx:MS_idx+MS_frames,:],axis = 0)/np.mean(np.linalg.norm(acc_stride_plus[MS_idx:MS_idx+MS_frames,:],axis = 1)).T
+        Fflat_accel = np.mean(acc_stride_plus[MS_idx:MS_idx+MS_frames,:],axis = 0)/np.mean(np.linalg.norm(acc_stride_plus[MS_idx:MS_idx+MS_frames,:],axis = 1)).T ### for pelvis change this to mean accel over whole trial
         
         # Rotation to the gravity vector: provides initial contidion for gyro integration
         thetai = findRotToLab(Fflat_accel)
         
         # Integrate and linearly correct the gyroscope
         theta = cumtrapz(gyr_stride_plus,time_stride_plus,initial=0,axis=0)
-        theta = theta-theta[MS_idx,:] # Midstance should be zero
+        theta = theta-theta[MS_idx,:] # Midstance should be zero                                                                                                  ### for pelvis change this to theta - theta(mean angle of whole trial)
         # Linear correction
         slope = theta[-1,:]/(len(theta)-MS_idx-1)
         drift = (slope*np.ones([len(theta),3]))*(np.array([range(len(theta)),range(len(theta)),range(len(theta))])).T
         drift = drift-drift[MS_idx,:]
-        #theta = theta - drift
+        theta = theta - drift
+        
         # Gyro integration initial condition
         if count == 0:
            theta = theta-thetai
@@ -306,87 +310,18 @@ def rot2gravity(timeseries, HS, MS, GS):
     
     return timeseries
 
-def rot2gravity_pel(timeseries):
-    """
-    Function to find the rotation of the foot flat acceleration vector to the 
-    defined lab gravity coordinate system.
 
-    Parameters
-    ----------
-    accel_vec : numpy array
-        3x1 vector of the x,y,z acceleration at foot flat
-
-    Returns
-    -------
-    theta : numpy array
-        3x1 vector for the rotation from the foot flat acceleration to the lab
-        coordinate system
-
-    """
-    #timeseries = pelvis
-    
-      
-    
-    meanAccel = np.mean(timeseries[:,4:7], axis = 0)/np.mean(np.linalg.norm(timeseries[:, 4:7], axis = 1)).T # Mean acceleration over whole trial gives mean orientation (assuming the subject starts and finishes the trial with the same acceleration - we do this by having them stand still when we start and stop recording) 
-    
-    
-    # Rotation to the gravity vector: provides average pelvis orientation through trial 
-    thetai = findRotToLab(meanAccel) ### Do we need to divide by the norm?
-        
-        # Integrate and linearly correct the gyroscope
-    theta = cumtrapz(timeseries[:, 1:4],timeseries[:, 0],initial=0,axis=0) # This gives the DIFFERENCE from average orientation of the pelvis IMU
-                                                                                                      
-    # Linear correction
-    slope = (theta[-1,:]-theta[0, :])/(len(theta)) # Subject starts and finishes trial standing in the same position. So the difference between first and last angle is the drift. 
-    drift = (slope*np.ones([len(theta),3]))*(np.array([range(len(theta)),range(len(theta)),range(len(theta))])).T
-    theta = theta - drift
-        
-    theta = theta + thetai # Subtract the offset of the IMU position from the gravity vector, calculated above
-        
-    # Convert to radians
-    theta = theta*np.pi/180
-    
-    # Rotate the accelerometer into the lab coordinate system (LCS)
-    # Note: this rotation has been converted to list comprehension for speed purposes
-    newacc = [(np.array([[cos(ang[2]),-sin(ang[2]),0],[sin(ang[2]),cos(ang[2]),0],[0,0,1]])@np.array([[1,0,0],[0,cos(ang[0]),-sin(ang[0])],[0,sin(ang[0]),cos(ang[0])]])@np.array([[cos(ang[1]),0,sin(ang[1])],[0,1,0],[-np.sin(ang[1]),0,cos(ang[1])]])@timeseries[kk,4:7].T).T-np.array([9.81,0,0]) for kk,ang in enumerate(theta)]
-    newacc = np.stack(newacc)
-    newacc = pd.DataFrame(newacc)
-    
-    timeseries[:,4:7] = newacc
-    
-    
-        # The written out loop for the rotation is as follows:
-        # newacc = np.zeros([len(timeseries),3])
-        # for kk,ang in enumerate(theta):
-        #     # Create the rotation matrix
-        #     rotZ = np.array([[cos(ang[2]),-sin(ang[2]),0],
-        #                     [sin(ang[2]),cos(ang[2]),0],
-        #                     [0,0,1]])
-        #     rotY = np.array([[cos(ang[1]),0,sin(ang[1])],
-        #                     [0,1,0],
-        #                     [-np.sin(ang[1]),0,cos(ang[1])]])
-        #     rotX = np.array([[1,0,0],
-        #                     [0,cos(ang[0]),-sin(ang[0])],
-        #                     [0,sin(ang[0]),cos(ang[0])]])
-            
-        #     rot = rotZ @ rotX @ rotY
-        #     newacc[kk,:] = (rot @ timeseris[kk,4:7].T).T-np.array([9.81,0,0])
-    
-    
-    return timeseries
 
 ### Import mocap data (for example)
 
 
-fPath = 'C:/Users/Kate.Harrison/Boa Technology Inc/PFL Team - General/Testing Segments/EndurancePerformance/EH_Trail_TrailStability3_Mech_July24/IMU/'
+fPath = 'C:/Users/Kate.Harrison/Boa Technology Inc/PFL Team - General/Testing Segments/EndurancePerformance/EH_Trail_TrailStability1_Mech_Apr24/IMU/'
 
-GPStiming = pd.read_csv('C:/Users/Kate.Harrison/Boa Technology Inc/PFL Team - General/Testing Segments/EndurancePerformance/EH_Trail_TrailStability3_Mech_July24/GPS/0_CombinedGPS.csv')
+GPStiming = pd.read_csv('C:/Users/Kate.Harrison/Boa Technology Inc/PFL Team - General/Testing Segments/EndurancePerformance/EH_Trail_TrailStability1_Mech_Apr24/GPS/CombinedGPS.csv')
 
-Hentries_pelvis = [fName for fName in os.listdir(fPath) if fName.endswith('highg.csv') and fName.count('04241') ]
-Lentries_pelvis = [fName for fName in os.listdir(fPath) if fName.endswith('lowg.csv') and fName.count('04241')]
 
-Hentries_foot = [fName for fName in os.listdir(fPath) if fName.endswith('highg.csv') and fName.count('04116') ]
-Lentries_foot = [fName for fName in os.listdir(fPath) if fName.endswith('lowg.csv') and fName.count('04116')]
+Hentries_foot = [fName for fName in os.listdir(fPath) if fName.endswith('highg.csv') and fName.count('03391') ]
+Lentries_foot = [fName for fName in os.listdir(fPath) if fName.endswith('lowg.csv') and fName.count('03391')]
 
 
 
@@ -395,137 +330,76 @@ badFileList = []
 for ii, fName in enumerate(Lentries_foot):
     
     try:
-        # ii = 11
+        # ii = 0
         # fName = Lentries_foot[ii]
         
         
-        sub = fName.split('-')[1]
-        conf = fName.split('-')[2]
-        trial = fName.split('-')[3].split('_')[0]
+        sub = fName.split('-')[0]
+        conf = fName.split('-')[1]
+        trial = fName.split('-')[4].split('_')[0]
+        slp = fName.split('-')[3]
         
        
         # Load the trials here
-        Ldf_pel = pd.read_csv(fPath + Lentries_pelvis[ii],sep=',', header = 0)
-        Hdf_pel = pd.read_csv(fPath + Hentries_pelvis[ii],sep=',', header = 0)
+        
         
         Ldf_foot = pd.read_csv(fPath + Lentries_foot[ii],sep=',', header = 0)
         Hdf_foot = pd.read_csv(fPath + Hentries_foot[ii],sep=',', header = 0)
         
         [IMUtime_foot, iacc_foot, igyr_foot] = align_fuse_extract_IMU(Ldf_foot, Hdf_foot)
-        [IMUtime_pel,iacc_pel,igyr_pel] = align_fuse_extract_IMU(Ldf_pel,Hdf_pel)
         
+        
+        ## Convert the time
         t0 = IMUtime_foot[0]
         IMUtime_foot = (IMUtime_foot - t0)*(1e-6)        
-        IMUtime_pel = (IMUtime_pel - t0)*(1e-6)
         
-        if IMUtime_pel[0] > 0:
-            tdiff = abs(IMUtime_foot - IMUtime_pel[0])
-            minidx = np.argmin(tdiff)
-            IMUtime_foot = IMUtime_foot[minidx:]
-            iacc_foot = iacc_foot[minidx:, :]
-            igyr_foot = igyr_foot[minidx:, :]
-            
-        else:
-            minidx = np.argmin(abs(IMUtime_pel))
-            IMUtime_pel = IMUtime_pel[minidx:]
-            iacc_pel = iacc_pel[minidx:, :]
-            igyr_pel = igyr_pel[minidx:, :]
-            
-        if len(IMUtime_pel) > len(IMUtime_foot):
-            IMUtime_pel = IMUtime_pel[:len(IMUtime_foot)]
-            iacc_pel = iacc_pel[:len(IMUtime_foot), :]
-            igyr_pel = igyr_pel[:len(IMUtime_foot), :]
-        elif len(IMUtime_foot) > len(IMUtime_pel):
-            IMUtime_foot = IMUtime_foot[:len(IMUtime_pel)]
-            iacc_foot = iacc_foot[:len(IMUtime_pel), :]
-            igyr_foot = igyr_foot[:len(IMUtime_pel), :]
+        
+        ## Identify foot contact & midstance
+        
+
+        sampEntX_foot = []
+        sampEntY_foot = []
+        sampEntZ_foot = []
                 
+                   
+        [HS, MS] = estIMU_HS_MS(iacc_foot, igyr_foot, IMUtime_foot, 1e8)
+        HS_t = IMUtime_foot[HS]
+        GS = np.where((np.diff(HS) > 0.5)*(np.diff(HS_t) < 1.5))[0]
         
+        foot = np.concatenate((IMUtime_foot[:, None], igyr_foot, iacc_foot), axis = 1)
+        
+        foot = rot2gravity_foot(foot, HS, MS, GS)
+        
+         
+        dat20 = foot[HS[0]:HS[20]+1, :]
+        
+        #plt.figure()
+        #plt.plot(dat20[:, 4])
+        
+        sampEntX_foot.append(nolds.sampen(dat20[:, 4], emb_dim = 3, tolerance = 0.2, ))
+        sampEntY_foot.append(nolds.sampen(dat20[:, 5], emb_dim = 3, tolerance = 0.2, ))
+        sampEntZ_foot.append(nolds.sampen(dat20[:, 6], emb_dim = 3, tolerance = 0.2, ))
+       
+       
+                  
        
         
-        pelvis = np.concatenate((IMUtime_pel[:,None], igyr_pel, iacc_pel), axis = 1)
-        pelvis = rot2gravity_pel (pelvis)              
-        ### Parse data into uphill, flat and downhill sections
+              
+        outcomes = pd.DataFrame({'Subject':sub, 'Config':conf, 'Slope':slp, 'Trial':trial, 
+                                 'sampEntX_foot':list(sampEntX_foot), 'sampEntY_foot':list(sampEntY_foot), 'sampEntZ_foot':list(sampEntZ_foot)
+                                  #'sampEntX_pel':list(sampEntX_pel), 'sampEntY_pel':list(sampEntY_pel), 'sampEntZ_pel':list(sampEntZ_pel)
+                                 })
+        outfileName = fPath + 'CompiledSampleEntropy_Rotated.csv'
+        if os.path.exists(outfileName) == False:
+            
+            outcomes.to_csv(outfileName, header=True, index = False)
+    
+        else:
+            outcomes.to_csv(outfileName, mode='a', header=False, index = False) 
         
-        tmpGPS = GPStiming[(GPStiming.Subject == sub) & (GPStiming.Config == conf) & (GPStiming.Sesh == int(trial))].reset_index()
-        
-        upGyr_foot = igyr_foot[(IMUtime_foot > 30) & (IMUtime_foot<tmpGPS.EndS1[0])]
-        upAccel_foot = iacc_foot[(IMUtime_foot > 30) & (IMUtime_foot<tmpGPS.EndS1[0])]
-        upTime = IMUtime_foot[(IMUtime_foot > 30) & (IMUtime_foot<tmpGPS.EndS1[0])]
-        up_pel = pelvis[(IMUtime_foot >30) & (IMUtime_foot<tmpGPS.EndS1[0])]
-        up = np.concatenate(( upTime[:, None], upGyr_foot, upAccel_foot, up_pel), axis = 1)
-        
-        
-        flatGyr_foot = igyr_foot[(IMUtime_foot > tmpGPS.StartS2[0]) & (IMUtime_foot < tmpGPS.EndS2[0])]
-        flatAccel_foot = iacc_foot[(IMUtime_foot > tmpGPS.StartS2[0]) & (IMUtime_foot < tmpGPS.EndS2[0])]
-        flatTime = IMUtime_foot[(IMUtime_foot > tmpGPS.StartS2[0]) & (IMUtime_foot < tmpGPS.EndS2[0])]
-        flat_pel = pelvis[(IMUtime_foot > tmpGPS.StartS2[0]) & (IMUtime_foot < tmpGPS.EndS2[0])]
-        flat = np.concatenate((flatTime[:, None], flatGyr_foot, flatAccel_foot, flat_pel), axis = 1)
-        
-        
-        downGyr_foot = igyr_foot[(IMUtime_foot> tmpGPS.StartS3[0]) & (IMUtime_foot < (tmpGPS.StartS3[0] + tmpGPS.TimeS3[0]))]
-        downAccel_foot = iacc_foot[(IMUtime_foot> tmpGPS.StartS3[0]) & (IMUtime_foot < (tmpGPS.StartS3[0] + tmpGPS.TimeS3[0]))]
-        downTime = IMUtime_foot[(IMUtime_foot> tmpGPS.StartS3[0]) & (IMUtime_foot < (tmpGPS.StartS3[0] + tmpGPS.TimeS3[0]))]
-        down_pel = pelvis[(IMUtime_foot> tmpGPS.StartS3[0]) & (IMUtime_foot < (tmpGPS.StartS3[0] + tmpGPS.TimeS3[0]))]
-        down = np.concatenate((downTime[:, None], downGyr_foot, downAccel_foot, down_pel), axis = 1)
-        
-               
-        for section in [up, flat, down]:
-            
-            #section = down
-            
-            
-            sampEntX_foot = []
-            sampEntY_foot = []
-            sampEntZ_foot = []
-            
-            sampEntX_pel = []
-            sampEntY_pel = []
-            sampEntZ_pel = []
-                       
-            [HS, MS] = estIMU_HS_MS(section[:,4:], section[:,1:4], section[:,0], 1e8)
-            HS_t = section[HS, 0]
-            GS = np.where((np.diff(HS) > 0.5)*(np.diff(HS_t) < 1.5))[0]
-            
-            section[:, :7] = rot2gravity(section[:, :7], HS, MS, GS)
-             
-            dat20 = section[HS[0]:HS[20]+1, :]
-            
-            #plt.figure()
-            #plt.plot(dat20[:, 4])
-            
-            sampEntX_foot.append(nolds.sampen(dat20[:, 4], emb_dim = 3, tolerance = 0.2, ))
-            sampEntY_foot.append(nolds.sampen(dat20[:, 5], emb_dim = 3, tolerance = 0.2, ))
-            sampEntZ_foot.append(nolds.sampen(dat20[:, 6], emb_dim = 3, tolerance = 0.2, ))
-            sampEntX_pel.append(nolds.sampen(dat20[:, 11], emb_dim = 3, tolerance = 0.2, ))
-            sampEntY_pel.append(nolds.sampen(dat20[:, 12], emb_dim = 3, tolerance = 0.2, ))
-            sampEntZ_pel.append(nolds.sampen(dat20[:, 13], emb_dim = 3, tolerance = 0.2, ))
-            
-           
-                      
-            if np.array_equiv(section, up) :
-                slp = 'up'
-            elif np.array_equiv(section, flat):
-                slp = 'flat'
-            else:
-                slp = 'down'
-            
-                  
-            outcomes = pd.DataFrame({'Subject':sub, 'Config':conf, 'Slope':slp, 'Trial':trial, 
-                                     'sampEntX_foot':list(sampEntX_foot), 'sampEntY_foot':list(sampEntY_foot), 'sampEntZ_foot':list(sampEntZ_foot),
-                                    'sampEntX_pel':list(sampEntX_pel), 'sampEntY_pel':list(sampEntY_pel), 'sampEntZ_pel':list(sampEntZ_pel)
-                                    })
-            outfileName = fPath + '0_CompiledSampleEntropy_Rotated.csv'
-            if os.path.exists(outfileName) == False:
-                
-                outcomes.to_csv(outfileName, header=True, index = False)
-        
-            else:
-                outcomes.to_csv(outfileName, mode='a', header=False, index = False) 
-            
         print(str(ii+1) + ' / ' + str(len(Lentries_foot)) + ' Good')
-             
+         
     except:
         badFileList.append(fName)
         print(str(ii +1) + ' / ' + str(len(Lentries_foot)) + ' Bad')
-        
+    
