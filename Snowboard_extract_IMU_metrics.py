@@ -12,17 +12,18 @@ import numpy as np
 from numpy import cos,sin,arctan2
 import scipy
 import scipy.interpolate
-from scipy.integrate import cumtrapz
+from scipy.integrate import cumulative_trapezoid
 import scipy.signal as sig
 import statsmodels.api as sm
 import matplotlib.pyplot as plt
 import os
 import time
-import addcopyfighandler
-from tkinter import messagebox
+# import addcopyfighandler
+from tkinter import messagebox 
+
 
 # Obtain IMU signals
-fPath = 'C:\\Users\\Kate.Harrison\\Boa Technology Inc\\PFL Team - General\\Testing Segments\\Snow Performance\\EH_Snowboard_BurtonWrap_Perf_Dec2024\\IMU\\'
+fPath = 'C:/Users/bethany.kilpatrick/Boa Technology Inc/PFL Team - General/Testing Segments/Snow Performance/2025_Mech_LowZonePFW_Ride/IMU/New folder/'
 
 # Global variables
 # Filtering
@@ -30,7 +31,7 @@ acc_cut = 1
 gyr_cut = 1
 
 # Debugging variables
-debug = 0
+debug = 1
 save_on = 1
 
 # Functions
@@ -133,7 +134,7 @@ def findEdgeAng_gyr(gyr_roll,t,turn_idx):
     min_ang = []
     
     for jj in range(len(turn_idx)-1):
-        roll_ang = cumtrapz(gyr_roll[turn_idx[jj]:turn_idx[jj+1]],t[turn_idx[jj]:turn_idx[jj+1]],initial=0,axis=0)
+        roll_ang = cumulative_trapezoid(gyr_roll[turn_idx[jj]:turn_idx[jj+1]],t[turn_idx[jj]:turn_idx[jj+1]],initial=0,axis=0)
         # Remove drift
         slope = roll_ang[-1]/(len(roll_ang)-1)
         drift = (slope*np.ones([len(roll_ang)]))*(np.array(range(len(roll_ang))))
@@ -169,41 +170,39 @@ if os.path.exists(fPath+'TrialSeg.npy') == True:
     st_idx = np.ndarray.tolist(trial_segment_old[1,:])
     en_idx = np.ndarray.tolist(trial_segment_old[2,:])
     
-# High and Low G accelerometers: note that the gyro is in the low G file
-Hentries = [fName for fName in os.listdir(fPath) if fName.endswith('highg.csv')]
-Lentries = [fName for fName in os.listdir(fPath) if fName.endswith('lowg.csv')]
 
-Hentries_board = []
-Hentries_boot = []
-for h in Hentries: 
-    if ('04116' in h or '03399' in h or '04580' in h):
-        Hentries_board.append(h)
-    elif '04241' in h:
-        Hentries_boot.append(h)
         
-Lentries_board = []
-Lentries_boot = []
-for l in Lentries: 
-    if ('04116' in l or '03399' in l or '04580' in l):
-        Lentries_board.append(l)
-    elif '04241' in l:
-        Lentries_boot.append(l)
+Lentries_board = [fName for fName in os.listdir(fPath) if fName.endswith('lowg.csv') and fName.count('04241')]
+Lentries_boot = [fName for fName in os.listdir(fPath) if fName.endswith('lowg.csv') and fName.count('04580')]   
+
+Hentries_board  = [fName for fName in os.listdir(fPath) if fName.endswith('highg.csv') and fName.count('04241')]
+Hentries_boot = [fName for fName in os.listdir(fPath) if fName.endswith('lowg.csv') and fName.count('04580')]
         
-bindingDat = pd.read_excel('C:\\Users\\Kate.Harrison\\Boa Technology Inc\\PFL Team - General\\Testing Segments\\Snow Performance\\EH_Snowboard_BurtonWrap_Perf_Dec2024/QualData.xlsx', 'Qual')
+bindingDat = pd.read_excel('C:/Users/bethany.kilpatrick/Boa Technology Inc/PFL Team - General/Testing Segments/Snow Performance/2025_Mech_LowZonePFW_Ride/2025_Mech_LowZonePFW_Ride_Qualitative.xlsx', 'Qual')
 bindingDat = bindingDat.iloc[:,:5].dropna()
 bindingDat['Subject'] = bindingDat['Subject'].str.replace(' ', '')
+
+
 
 
 for ii in range(len(Lentries_board)):
     # Grab the .csv files
     
-    #ii = 0
+    # ii = 46
     print(Lentries_board[ii])
-    # Extract trial information
-    tmpsName = Lentries_board[ii].split(sep = "-")[1]
-    tmpDir = Lentries_board[ii].split(sep = '-')[2] # Regular or Goofy
-    tmpConfig = Lentries_board[ii].split(sep = "-")[3]
-    tmpTrialNo = Lentries_board[ii].split(sep = "-")[4][0]
+    # Extract trial information 
+    if "RideSnowboard-" in Lentries_board[ii] :
+        tmpsName = Lentries_board[ii].split(sep = "-")[1]
+        tmpDir = Lentries_board[ii].split(sep = '-')[2] # Regular or Goofy
+        tmpConfig = Lentries_board[ii].split(sep = "-")[3]
+        tmpTrialNo = Lentries_board[ii].split(sep = "-")[4][0]
+    else:    
+        tmpsName = Lentries_board[ii].split(sep = "-")[0]
+        tmpDir = Lentries_board[ii].split(sep = '-')[1] # Regular or Goofy
+        tmpConfig = Lentries_board[ii].split(sep = "-")[2]
+        tmpTrialNo = Lentries_board[ii].split(sep = "-")[3][0]
+        
+
     
     Ldf_board = pd.read_csv(fPath + Lentries_board[ii],sep=',', header = 0)
     Ldf_boot = pd.read_csv(fPath + Lentries_boot[ii], sep = ',', header = 0)
@@ -227,7 +226,8 @@ for ii in range(len(Lentries_board)):
     else:
         # If new trial, us UI to segment the trial
         fig, ax = plt.subplots()
-        ax.plot(igyr_board[:,1], label = 'Board Angle')
+        ax.plot(igyr_board[:,1], label = 'Board Anglular Velocity')
+        ax.set_title(Lentries_board[ii].split(sep = "_")[0])
         fig.legend()
         print('Select start and end of analysis trial')
         pts = np.asarray(plt.ginput(2, timeout=-1))
@@ -245,7 +245,7 @@ for ii in range(len(Lentries_board)):
     igyr_board = igyr_board[tmp_st:tmp_en,:]; igyr_boot = igyr_boot[tmp_st:tmp_en]
     
     igyr_board = filtIMUsig(igyr_board,gyr_cut,IMUtime_board)
-    igyr_boot = filtIMUsig(igyr_boot, gyr_cut, IMUtime_boot)
+    igyr_boot = filtIMUsig(igyr_boot, gyr_cut, IMUtime_boot) #Getting error for AK_PFS_1
     
    
     
@@ -275,19 +275,19 @@ for ii in range(len(Lentries_board)):
         igyr_board = igyr_board[-lag:,:]
         IMUtime_board = IMUtime_board[-lag:]
         
-    # plt.figure()
-    # plt.plot(igyr_boot[:,2], label = 'shifted boot gyr')
-    # plt.plot(igyr_board[:,1], label = 'shifted board gyr')
-    # plt.legend()
+    plt.figure()
+    plt.plot(igyr_boot[:,2], label = 'shifted boot gyr')
+    plt.plot(igyr_board[:,1], label = 'shifted board gyr')
+    plt.legend()
     
-    igyr_det = filtIMUsig(igyr_board,0.5,IMUtime_board)
-    igyr_det = igyr_det[:,1]
-    
-    
+    igyr_det = filtIMUsig(igyr_boot,0.5,IMUtime_boot)
+    igyr_det = igyr_det[:,2]
+    # igyr_det = igyr_det - np.mean(igyr_det)
+        
    
     
     #__________________________________________________________________________
-    # Turn segmentation: Find when the turn is happening
+
     ipeaks,_ = sig.find_peaks(igyr_det, height = 10, distance = 200)
     # Visualize the peak detection
     answer = True # Defaulting to true: In case "debug" is not used
@@ -295,11 +295,23 @@ for ii in range(len(Lentries_board)):
         plt.figure()
         plt.plot(igyr_det)
         plt.plot(ipeaks,igyr_det[ipeaks],'bs')
-        answer = messagebox.askyesno("Question","Is data clean?")
+        answer = messagebox.askyesno("Question","Is data clean?") 
+        saveFolder = fPath + 'IMU_PeakDetectionPlots'
+        
+        if answer == True:
+            if os.path.exists(saveFolder) == False:
+                os.mkdir(saveFolder) 
+                
+            plt.savefig(saveFolder + '/' + Lentries_board[ii]  +'.png')
+         
+        
+       
+        plt.close('all')
+    
         plt.close()
         if answer == False:
             print('Adding file to bad file list')
-            badFileList.append(Lentries[ii])
+            badFileList.append(Lentries_board[ii])
     
     if answer == True:
         print('Estimating point estimates')
@@ -314,11 +326,7 @@ for ii in range(len(Lentries_board)):
         boardAng_heel.extend(tmp_boardheel)
         
         
-        try:
-            rearAng = bindingDat[bindingDat.Subject == tmpsName].reset_index()['RearBindingAngle'][0] * 0.0174533
-            
-        except:
-            rearAng = 0
+        rearAng = bindingDat[bindingDat.Subject == tmpsName].reset_index()['RearBindingAngle'][0] * 0.0174533
         
        
         #roll_ang = cumtrapz(gyr_roll[turn_idx[jj]:turn_idx[jj+1]],t[turn_idx[jj]:turn_idx[jj+1]],initial=0,axis=0)
@@ -336,8 +344,8 @@ for ii in range(len(Lentries_board)):
             # plt.plot(igyr_boardRot[:,1], label = 'Rotated boot gyr')  
             # plt.legend()
             
-            tmp_boardang=cumtrapz(igyr_boardRot[:, 1], IMUtime_board[ipeaks[jj]:ipeaks[jj+1]], initial = 0, axis = 0)
-            tmp_bootang =cumtrapz(igyr_boot[ipeaks[jj]:ipeaks[jj+1], 2], IMUtime_boot[ipeaks[jj]:ipeaks[jj+1]], initial = 0, axis = 0)
+            tmp_boardang=cumulative_trapezoid(igyr_boardRot[:, 1], IMUtime_board[ipeaks[jj]:ipeaks[jj+1]], initial = 0, axis = 0)
+            tmp_bootang =cumulative_trapezoid(igyr_boot[ipeaks[jj]:ipeaks[jj+1], 2], IMUtime_boot[ipeaks[jj]:ipeaks[jj+1]], initial = 0, axis = 0)
             
             if tmpDir == 'Regular':
                 tmp_bootang = tmp_bootang*-1
@@ -372,18 +380,20 @@ trial_segment = np.array([trial_name,st_idx,en_idx])
 np.save(fPath+'TrialSeg.npy',trial_segment)
 
 # Save the outcome metrics
-outcomes = pd.DataFrame({'Subject':list(sName),'Config':list(cName),'TrialNo':list(TrialNo),
+outcomes = pd.DataFrame({'Subject':list(sName),'Config':list(cName),'Order':list(TrialNo),
                          'BoardAngle_ToeTurns':list(boardAng_toe), 'BoardAngle_HeelTurns':list(boardAng_heel), 
                          'BootFlex':list(boot_flex)})  
 
-outfileName = 'C:\\Users\\Kate.Harrison\\Boa Technology Inc\\PFL Team - General\\Testing Segments\\Snow Performance\\EH_Snowboard_BurtonWrap_Perf_Dec2024\\IMU\\IMUOutcomes.csv'
+
+
+outfileName = fPath + '0_IMUOutcomes.csv'
 if save_on == 1:
     if os.path.exists(outfileName) == False:
-        
+    
         outcomes.to_csv(outfileName, header=True, index = False)
 
     else:
         outcomes.to_csv(outfileName, mode='a', header=False, index = False) 
-
-
+        
+        
 
