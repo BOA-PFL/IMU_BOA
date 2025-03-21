@@ -508,7 +508,7 @@ for ii in range(len(Lentries)):
     iHS = []; iGS = []
     
 outcomes = pd.DataFrame({'Subject':list(oSubject), 'Config': list(oConfig), 'Movement':list(oMovement),
-                         'Sesh': list(oSesh), 'pJerk':list(pJerk),'pAcc':list(pAcc), 'pGyr':list(pGyr),
+                         'Order': list(oSesh), 'pJerk':list(pJerk),'pAcc':list(pAcc), 'pGyr':list(pGyr),
                            'rMLacc':list(rMLacc),'rIEgyro':list(rIEgyro),'pIEgyro':list(pIEgyro) ,'imuSpeed':list(imuSpeed)})
 
 
