@@ -23,14 +23,17 @@ from tkinter import messagebox
 
 
 # Obtain IMU signals
-fPath = 'C:\\Users\\bethany.kilpatrick\\Boa Technology Inc\\PFL - General\\Testing Segments\\Hike\\EH_Hike_MidcutSD_Mech_April2024\\IMU\\Trail\\steve\\'
+fPath = 'C:\\Users\\milena.singletary\\OneDrive - BOA Technology Inc\\General - PFL Team\\Testing Segments\\WorkWear_Performance\\2025_Performance_HighCutPFSWorkwearI_TimberlandPro\\IMU\\'
 
 save_on = 1
-debug = 1
+debug = 0
 
 # High and Low G accelerometers: note that the gyro is in the low G file
-Hentries = [fName for fName in os.listdir(fPath) if fName.endswith('highg.csv') ] 
-Lentries = [fName for fName in os.listdir(fPath) if fName.endswith('lowg.csv')] 
+# Hentries = [fName for fName in os.listdir(fPath) if fName.endswith('highg.csv') ] 
+# Lentries = [fName for fName in os.listdir(fPath) if fName.endswith('lowg.csv')] 
+
+Hentries = [fName for fName in os.listdir(fPath) if fName.endswith('highg.csv') and ('03391') in fName  ] 
+Lentries = [fName for fName in os.listdir(fPath) if fName.endswith('lowg.csv') and ('03391') in fName ] 
 
 # Functions
 def align_fuse_extract_IMU(LGdat,HGdat):
@@ -356,6 +359,49 @@ def filtIMUsig(sig_in,cut,t):
     sig_out = np.array([sig.filtfilt(b, a, sig_in[:,jj]) for jj in range(3)]).T    
     return(sig_out)
 
+
+
+def intp_strides(var,landings,GS):
+    """
+    Function to interpolate the variable of interest across a stride
+    (from foot contact to subsiquent foot contact) in order to plot the 
+    variable of interest over top each other
+
+    Parameters
+    ----------
+    var : list or numpy array
+        Variable of interest. Can be taken from a dataframe or from a numpy array
+    landings : list
+        Foot contact indicies
+
+    Returns
+    -------
+    intp_var : numpy array
+        Interpolated variable to 101 points with the number of columns dictated
+        by the number of strides.
+
+    """
+    # Preallocate
+    intp_var = np.zeros((101,len(GS)-1))
+    # Index through the strides
+    for ii in range(len(GS)-1):
+        dum = var[landings[GS[ii]]:landings[GS[ii]+1]]
+        f = scipy.interpolate.interp1d(np.arange(0,len(dum)),dum)
+        intp_var[:,ii] = f(np.linspace(0,len(dum)-1,101))
+        
+    return intp_var
+
+
+def plotStep(inputAcc, inputGy, inputLandings, goodLandings):
+    # plots interpolated stride, acc & gyro
+    plt.subplot(1,2,1) # first plot
+    plt.plot(intp_strides(inputAcc,inputLandings, goodLandings), 'k')
+    plt.ylabel('Vertical Acceleration [m/s^2]')
+    plt.subplot(1,2,2) # second plot
+    plt.plot(intp_strides(inputGy,inputLandings, goodLandings), 'k')
+    plt.ylabel('ML Angular Velocity [deg/s]')
+    plt.tight_layout()
+
 # 
 oSubject = []
 oConfig = []
@@ -447,29 +493,38 @@ for ii in range(len(Lentries)):
     iGS = np.where((np.diff(iHS_t) > .75)*(np.diff(iHS_t) < 2))[0]
     
     # Debugging: Creation of dialog box for looking where foot contact are accurate
-    answer = True # Defaulting to true: In case "debug" is not used
+    answer = True # Defaulting to true: In case "debug" is not used    
     if debug == 1:
+        plotStep(iacc[:,2], igyr[:,1], iHS, iGS)
+        
+        plt.figure()
         plt.plot(IMUtime,iacc[:,2])
         plt.plot(iHS_t,iacc[iHS,2],'ro')
         plt.plot(iHS_t[iGS],iacc[iHS[iGS],2],'ko')
         plt.ylabel('Vertical Acceleration [m/s^2]')
         plt.xlabel('Time [sec]')
-        answer = messagebox.askyesno("Question","Is data clean?")
-        saveFolder = fPath + 'IMU_2DPlots'
+        # answer = messagebox.askyesno("Question","Is data clean?")
         
-        if answer == True:
-            if os.path.exists(saveFolder) == False:
-                os.mkdir(saveFolder) 
-                
-            plt.savefig(saveFolder + '/' + Lentries[ii]  +'.png')
-         
-        
-       
-        plt.close('all')
-    
         if answer == False:
             print('Adding file to bad file list')
             badFileList.append(Lentries[ii])
+        
+        plt.close('all')
+        
+        
+    if save_on == 1:
+        plotStep(iacc[:,2], igyr[:,1], iHS, iGS)
+        answer = messagebox.askyesno("Question","Is data clean?")
+        saveFolder = fPath + 'IMU_Plots'
+        
+        if answer == True:
+            if os.path.exists(saveFolder) == False:
+                os.mkdir(saveFolder)  
+            plt.savefig(saveFolder + '/' + Lentries[ii].split(sep="_")[0]  +'.png')
+         
+        plt.close('all')
+    
+
         
     if answer == True:
         print('Estimating point estimates')
