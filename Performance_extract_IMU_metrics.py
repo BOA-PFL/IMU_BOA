@@ -14,7 +14,7 @@ import numpy as np
 from numpy import cos,sin,arctan2
 import scipy
 import scipy.interpolate
-from scipy.integrate import cumtrapz
+from scipy.integrate import cumulative_trapezoid as cumtrapz
 import scipy.signal as sig
 import matplotlib.pyplot as plt
 import os
