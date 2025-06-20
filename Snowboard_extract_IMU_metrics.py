@@ -35,8 +35,8 @@ bindingDat['Subject'] = bindingDat['Subject'].str.replace(' ', '')
 gyr_cut = 1
 
 # Debugging variables
-debug = 0
-save_on = 1
+debug = 1
+save_on = 0
 
 # Functions
 def delimitTrialIMU(SegSig):
@@ -150,7 +150,7 @@ TurnTime = []
 
 print('This script assumes that the IMU is placed on the leading/front boot')
 
-for ii in range(0,len(Lentries_board)):
+for ii in range(len(Lentries_board)):
     print(Lentries_board[ii])
     # Extract trial information 
     tmpsName = Lentries_board[ii].split(sep = "-")[1]
@@ -199,10 +199,10 @@ for ii in range(0,len(Lentries_board)):
     
     # IMU alignment: Cross correlate the boot and board signals
     # Note: This assumes that the IMU is placed on the front boot    
-    if tmpDir == 'Regular':
-        corr = sig.correlate(igyr_boot[:,2],igyr_board[:,1], mode = 'full')
-    else:
-        corr = sig.correlate(igyr_boot[:,2]*-1, igyr_board[:,1], mode = 'full')
+    if tmpDir == 'Goofy': # Note: if the IMU is place on the back boot, this will need to be changed to regular
+        igyr_boot = -igyr_boot
+        
+    corr = sig.correlate(igyr_boot[:,2],igyr_board[:,1], mode = 'full')    
         
     lags = sig.correlation_lags(len(igyr_boot[:,2]),len(igyr_board[:,1]),mode='full')
     
