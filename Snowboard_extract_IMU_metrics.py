@@ -14,113 +14,76 @@ import scipy
 import scipy.interpolate
 from scipy.integrate import cumulative_trapezoid
 import scipy.signal as sig
-import statsmodels.api as sm
 import matplotlib.pyplot as plt
 import os
-import time
 # import addcopyfighandler
 from tkinter import messagebox 
 
 
 # Obtain IMU signals
-fPath = 'C:/Users/bethany.kilpatrick/Boa Technology Inc/PFL Team - General/Testing Segments/Snow Performance/2025_Mech_LowZonePFW_Ride/IMU/New folder/'
+fPath = 'Z:\\Testing Segments\\Snow Performance\\2024\\EH_Snowboard_BurtonWrap_Perf_Dec2024\\IMU\\'
+
+Lentries_board = [fName for fName in os.listdir(fPath) if fName.endswith('lowg.csv') and (fName.count('04116') or fName.count('03399') or fName.count('04580'))]
+Lentries_boot = [fName for fName in os.listdir(fPath) if fName.endswith('lowg.csv') and fName.count('04241')]
+        
+bindingDat = pd.read_excel('Z:\\Testing Segments\\Snow Performance\\2024\\EH_Snowboard_BurtonWrap_Perf_Dec2024/QualData.xlsx', 'Qual')
+bindingDat = bindingDat.iloc[:,:5].dropna()
+bindingDat['Subject'] = bindingDat['Subject'].str.replace(' ', '')
 
 # Global variables
 # Filtering
-acc_cut = 1
 gyr_cut = 1
 
 # Debugging variables
 debug = 1
-save_on = 1
+save_on = 0
 
 # Functions
-def align_fuse_extract_IMU_angles(LGdat,HGdat):
+def delimitTrialIMU(SegSig):
     """
-    Function to align, fuse, and extract all IMU information
-    
-    The high-g accelerometer is interpolated to the low-g accelerometer using
-    the UNIX time-stamps in the innate files. The two accelerometers are then
-    aligned using a cross correlation. Typically this results in a 1 frame
-    phase shift
+    Function to crop the data
 
     Parameters
     ----------
-    LGdat : dataframe
-        low-g data frame that is extracted as raw data from Capture.U. This
-        dataframe contains both the low-g accelerometer and the gyroscope.
-    HGdat : dataframe
-        high-g data frame that is extracted as raw data from Capture.U.
+    SegSig : dataframe
+        The signal that will allow for segmentation
 
     Returns
     -------
-    LGtime : numpy array (Nx1)
-        time (UNIX) from the low-g file
-    acc : numpy array (Nx3)
-        X,Y,Z fused (between low-g and high-g) acceleration from the IMU
-    gyr : numpy array (Nx3)
-        X,Y,Z gyroscope from the IMU
-    glo_ang : numpy array (Nx3)
-        global angle from IMU
+    segidx: array
+        Segmentation indices
 
     """
-    # LGdat: low-g dataframe (contains accelerometer and gyroscope)
-    # HGdat: high-g data frame (contains only accelerometer)
-    
-    # Need to align the data
-    # 1: get the data collection frequency from the low-g acclerometer
-    acc_lg = np.array(LGdat.iloc[:,2:5])
-    gyr = np.array(LGdat.iloc[:,5:8])
-    glo_ang = np.array(LGdat.iloc[:,8:11])
-    
-    dum = np.array(HGdat.iloc[:,2:])
-    
-    HGtime = np.array(HGdat.iloc[:,0])
-    LGtime = np.array(LGdat.iloc[:,0])
-    
-    idx = (LGtime < np.max(HGtime))*(LGtime > np.min(HGtime))
-    LGtime = LGtime[idx]
-    acc_lg = acc_lg[idx,:]
-    gyr = gyr[idx,:]
-    glo_ang = glo_ang[idx,:]
-    
-    # Create an empty array to fill with the resampled/downsampled high-g acceleration    
-    resamp_HG = np.zeros([len(LGtime),3])
-        
-    for jj in range(3):
-        f = scipy.interpolate.interp1d(HGtime,dum[:,jj])
-        resamp_HG[:,jj] = f(LGtime)
-        
-    # Cross-correlate the y-components
-    corr_arr = sig.correlate(acc_lg[:,1],resamp_HG[:,1],mode='full')
-    lags = sig.correlation_lags(len(acc_lg[:,1]),len(resamp_HG[:,1]),mode='full')
-    lag = lags[np.argmax(corr_arr)]
-    
-    if lag > 0:
-        LGtime = LGtime[lag:]
-        gyr = gyr[lag:,:]
-        acc_lg = acc_lg[lag:,:]
-        glo_ang = glo_ang[lag:,:]
-        resamp_HG = resamp_HG[:-lag,:]
-        
-    elif lag < 0:
-        LGtime = LGtime[:lag]
-        gyr = gyr[:lag,:]
-        acc_lg = acc_lg[:lag,:]
-        glo_ang = glo_ang[:lag,:]
-        resamp_HG = resamp_HG[-lag:,:]
-    
-    acc = acc_lg
-    
-    # Find when the data is above/below 16G and replace with high-g accelerometer
-    for jj in range(3):
-        idx = np.abs(acc[:,jj]) > (9.81*16-0.1)
-        acc[idx,jj] = resamp_HG[idx,jj]
-    
-    return [LGtime,acc,gyr,glo_ang]
+    print('Select 2 points: the start and end of the trial')
+    fig, ax = plt.subplots()
+    ax.plot(SegSig, label = 'Segmenting Signal')
+    fig.legend()
+    pts = np.asarray(plt.ginput(2, timeout=40))
+    plt.close()
+    segidx = pts[:,0]
+    return(segidx)
 
 def filtIMUsig(sig_in,cut,t):
-    # Set up a 2nd order 50 Hz low pass buttworth filter
+    """
+    Filter 3 axes of an IMU signal (X,Y,Z) with a 2nd order butterworth filter 
+    at the specified cut-off frequency
+
+    Parameters
+    ----------
+    sig_in : numpy array (Nx3)
+        acceleration or gyroscope signal
+    cut : float
+        cut-off frequency
+    t : numpy array
+        time (sec)
+
+    Returns
+    -------
+    sig_out : numpy array (Nx3)
+        filtered signal at the specified cut-off frequency
+
+    """
+    # Set up a 2nd order low pass buttworth filter
     freq = 1/np.mean(np.diff(t))
     w = cut / (freq / 2) # Normalize the frequency
     b, a = sig.butter(2, w, 'low')
@@ -129,6 +92,28 @@ def filtIMUsig(sig_in,cut,t):
     return(sig_out)
 
 def findEdgeAng_gyr(gyr_roll,t,turn_idx):
+    """
+    Using the gyroscope, compute the maximum edge angles by integrating the
+    roll angular velocity and use a linear correction to account for
+    integration drift
+
+    Parameters
+    ----------
+    gyr_roll : numpy array (Nx1)
+        Roll angular velocity (deg/sec)
+    t : numpy array (Nx1)
+        time (sec)
+    turn_idx : numpy array (Mx1)
+        turn indicies
+
+    Returns
+    -------
+    max_ang : list (Mx1)
+        Maximum toe edge angle (deg)
+    min_ang : list (Mx1)
+        Maximum heel edge angle (deg)
+
+    """
     
     max_ang = [] # toe edge for board angle 
     min_ang = []
@@ -163,99 +148,61 @@ TrialNo = []
 Side = []
 TurnTime = []
 
-# Load in the trial segmentation variable if it is in the directory
-if os.path.exists(fPath+'TrialSeg.npy') == True:
-    trial_segment_old = np.load(fPath+'TrialSeg.npy')
-    trial_name = np.ndarray.tolist(trial_segment_old[0,:])
-    st_idx = np.ndarray.tolist(trial_segment_old[1,:])
-    en_idx = np.ndarray.tolist(trial_segment_old[2,:])
-    
-
-        
-Lentries_board = [fName for fName in os.listdir(fPath) if fName.endswith('lowg.csv') and fName.count('04241')]
-Lentries_boot = [fName for fName in os.listdir(fPath) if fName.endswith('lowg.csv') and fName.count('04580')]   
-
-Hentries_board  = [fName for fName in os.listdir(fPath) if fName.endswith('highg.csv') and fName.count('04241')]
-Hentries_boot = [fName for fName in os.listdir(fPath) if fName.endswith('lowg.csv') and fName.count('04580')]
-        
-bindingDat = pd.read_excel('C:/Users/bethany.kilpatrick/Boa Technology Inc/PFL Team - General/Testing Segments/Snow Performance/2025_Mech_LowZonePFW_Ride/2025_Mech_LowZonePFW_Ride_Qualitative.xlsx', 'Qual')
-bindingDat = bindingDat.iloc[:,:5].dropna()
-bindingDat['Subject'] = bindingDat['Subject'].str.replace(' ', '')
-
-
-
+print('This script assumes that the IMU is placed on the leading/front boot')
 
 for ii in range(len(Lentries_board)):
-    # Grab the .csv files
-    
-    # ii = 46
     print(Lentries_board[ii])
     # Extract trial information 
-    if "RideSnowboard-" in Lentries_board[ii] :
-        tmpsName = Lentries_board[ii].split(sep = "-")[1]
-        tmpDir = Lentries_board[ii].split(sep = '-')[2] # Regular or Goofy
-        tmpConfig = Lentries_board[ii].split(sep = "-")[3]
-        tmpTrialNo = Lentries_board[ii].split(sep = "-")[4][0]
-    else:    
-        tmpsName = Lentries_board[ii].split(sep = "-")[0]
-        tmpDir = Lentries_board[ii].split(sep = '-')[1] # Regular or Goofy
-        tmpConfig = Lentries_board[ii].split(sep = "-")[2]
-        tmpTrialNo = Lentries_board[ii].split(sep = "-")[3][0]
-        
+    tmpsName = Lentries_board[ii].split(sep = "-")[1]
+    tmpDir = Lentries_board[ii].split(sep = '-')[2] # Regular or Goofy
+    tmpConfig = Lentries_board[ii].split(sep = "-")[3]
+    tmpTrialNo = Lentries_board[ii].split(sep = "-")[4][0]
 
-    
+    # Import .csv
     Ldf_board = pd.read_csv(fPath + Lentries_board[ii],sep=',', header = 0)
+    igyr_board = np.array(Ldf_board.iloc[:,5:8])
+    IMUtime_board = np.array(Ldf_board.iloc[:,0])
+    
+    # Make sure that the boot & board file are for the same trial
+    
     Ldf_boot = pd.read_csv(fPath + Lentries_boot[ii], sep = ',', header = 0)
-    Hdf_board = pd.read_csv(fPath + Hentries_board[ii],sep=',', header = 0)
-    Hdf_boot = pd.read_csv(fPath + Hentries_boot[ii], sep = ',', header = 0 )
-    
-    
-    # Combine the IMU data
-    [IMUtime_board,iacc_board,igyr_board,iang_board] = align_fuse_extract_IMU_angles(Ldf_board,Hdf_board)
-    [IMUtime_boot, iacc_boot, igyr_boot, iang_boot] = align_fuse_extract_IMU_angles(Ldf_boot, Hdf_boot)
+    igyr_boot = np.array(Ldf_boot.iloc[:,5:8])
+    IMUtime_boot = np.array(Ldf_boot.iloc[:,0])
+
     # Convert the time
     IMUtime_board = (IMUtime_board - IMUtime_board[0])*(1e-6)
     IMUtime_boot = (IMUtime_boot - IMUtime_boot[0])*(1e-6)
+    
+    # Detection signal based on the angular velocity of the snowboard shifting
+    # while turning from the heel to toe edges of the snowboard
+    igyr_det = filtIMUsig(igyr_board,0.5,IMUtime_board)
+    igyr_det = igyr_det[:,1]
    
     #__________________________________________________________________________
     # Trial Segmentation
-    if Lentries_board[ii] in trial_name:
-        # If the trial was previously segmented, grab the appropriate start/end points
-        idx = trial_name.index(Lentries_board[ii])
-        tmp_st = int(st_idx[idx]); tmp_en = int(en_idx[idx]);
+    if os.path.exists(fPath+Lentries_board[ii]+'TrialSeg.npy'):
+        # Load the trial segmentation
+        trial_segment = np.load(fPath+Lentries_board[ii]+'TrialSeg.npy', allow_pickle =True)
     else:
-        # If new trial, us UI to segment the trial
-        fig, ax = plt.subplots()
-        ax.plot(igyr_board[:,1], label = 'Board Anglular Velocity')
-        ax.set_title(Lentries_board[ii].split(sep = "_")[0])
-        fig.legend()
-        print('Select start and end of analysis trial')
-        pts = np.asarray(plt.ginput(2, timeout=-1))
-        plt.close()
-        tmp_st = round(pts[0,0]); tmp_en = round(pts[1,0])
-        st_idx.append(tmp_st)
-        en_idx.append(tmp_en)
-        trial_name.append(Lentries_board[ii])
-        
+        # Segment the trial based on the gyroscope deteciton signal
+        trial_segment = delimitTrialIMU(igyr_det)
+        # Save the trial segmentation
+        np.save(fPath+Lentries_board[ii]+'TrialSeg.npy',trial_segment)
+    tmp_st = int(trial_segment[0]); tmp_en = int(trial_segment[1])        
     #__________________________________________________________________________
     # Use only the data from the pre-selected region
     IMUtime_board = IMUtime_board[tmp_st:tmp_en]; IMUtime_boot = IMUtime_boot[tmp_st:tmp_en]
-    iang_board = iang_board[tmp_st:tmp_en,:]; iang_boot = iang_boot[tmp_st:tmp_en]
-    iacc_board = iacc_board[tmp_st:tmp_en,:]; iacc_boot = iacc_boot[tmp_st:tmp_en]
     igyr_board = igyr_board[tmp_st:tmp_en,:]; igyr_boot = igyr_boot[tmp_st:tmp_en]
     
     igyr_board = filtIMUsig(igyr_board,gyr_cut,IMUtime_board)
-    igyr_boot = filtIMUsig(igyr_boot, gyr_cut, IMUtime_boot) #Getting error for AK_PFS_1
+    igyr_boot = filtIMUsig(igyr_boot, gyr_cut, IMUtime_boot)
     
-   
-    
-    if tmpDir == 'Regular':
+    # IMU alignment: Cross correlate the boot and board signals
+    # Note: This assumes that the IMU is placed on the front boot    
+    if tmpDir == 'Goofy': # Note: if the IMU is place on the back boot, this will need to be changed to regular
+        igyr_boot = -igyr_boot
         
-        corr = sig.correlate(igyr_boot[:,2]*-1,igyr_board[:,1], mode = 'full')
-        
-    else:
-        
-        corr = sig.correlate(igyr_boot[:,2], igyr_board[:,1], mode = 'full')
+    corr = sig.correlate(igyr_boot[:,2],igyr_board[:,1], mode = 'full')    
         
     lags = sig.correlation_lags(len(igyr_boot[:,2]),len(igyr_board[:,1]),mode='full')
     
@@ -274,27 +221,46 @@ for ii in range(len(Lentries_board)):
         IMUtime_boot = IMUtime_boot[:lag]
         igyr_board = igyr_board[-lag:,:]
         IMUtime_board = IMUtime_board[-lag:]
-        
-    plt.figure()
-    plt.plot(igyr_boot[:,2], label = 'shifted boot gyr')
-    plt.plot(igyr_board[:,1], label = 'shifted board gyr')
-    plt.legend()
     
-    igyr_det = filtIMUsig(igyr_boot,0.5,IMUtime_boot)
-    igyr_det = igyr_det[:,2]
-    # igyr_det = igyr_det - np.mean(igyr_det)
-        
-   
-    
+    igyr_det = filtIMUsig(igyr_board,0.5,IMUtime_board)
+    igyr_det = igyr_det[:,1]      
     #__________________________________________________________________________
-
-    ipeaks,_ = sig.find_peaks(igyr_det, height = 10, distance = 200)
+    # Turn detection
+    ipeaks,_ = sig.find_peaks(igyr_det, height = 10, distance = 200) # create a function to filter out double peak detections.
+    # Filter out the double peak detection
+    ii = 0
+    ipeaks_up = []
+    while ii < len(ipeaks)-1:
+        if np.sum(igyr_det[ipeaks[ii]:ipeaks[ii+1]] < -5) > 10:
+            # There is a good peak detection
+            ipeaks_up.append(ipeaks[ii])
+            ii = ii+1
+        else:
+            # There is not a good detection. Figure out which of the two peaks
+            # are higher in magnitude
+            if igyr_det[ipeaks[ii]] > igyr_det[ipeaks[ii+1]]:
+                ipeaks_up.append(ipeaks[ii])
+                ii = ii+2
+            else:
+                ipeaks_up.append(ipeaks[ii+1])
+                ii = ii+2
+        
+    ipeaks_up = np.array(ipeaks_up)    
+    
     # Visualize the peak detection
     answer = True # Defaulting to true: In case "debug" is not used
     if debug == 1:
         plt.figure()
+        plt.subplot(1,2,1)
+        plt.plot(igyr_boot[:,2], label = 'shifted boot gyr')
+        plt.plot(igyr_board[:,1], label = 'shifted board gyr')
+        plt.legend()
+        plt.title('XCorr Check: Shifted Frames:'+str(lag))
+        plt.ylabel('Angular Velocity (deg/sec)')
+        plt.subplot(1,2,2)
         plt.plot(igyr_det)
-        plt.plot(ipeaks,igyr_det[ipeaks],'bs')
+        plt.plot(ipeaks_up,igyr_det[ipeaks_up],'bs')
+        plt.title('Turn ID Check')
         answer = messagebox.askyesno("Question","Is data clean?") 
         saveFolder = fPath + 'IMU_PeakDetectionPlots'
         
@@ -304,11 +270,8 @@ for ii in range(len(Lentries_board)):
                 
             plt.savefig(saveFolder + '/' + Lentries_board[ii]  +'.png')
          
-        
-       
         plt.close('all')
     
-        plt.close()
         if answer == False:
             print('Adding file to bad file list')
             badFileList.append(Lentries_board[ii])
@@ -317,37 +280,27 @@ for ii in range(len(Lentries_board)):
         print('Estimating point estimates')
         #______________________________________________________________________
         # Find the edge angles from the gyroscope
-        
-       
-            
-            
         tmp_boardheel, tmp_boardtoe = findEdgeAng_gyr(igyr_board[:,1],IMUtime_board,ipeaks)
         boardAng_toe.extend(tmp_boardtoe)
         boardAng_heel.extend(tmp_boardheel)
+        frontAng = bindingDat[bindingDat.Subject == tmpsName].reset_index()['FrontBindingAngle'][0] * np.pi/180 # convert to radians
         
-        
-        rearAng = bindingDat[bindingDat.Subject == tmpsName].reset_index()['RearBindingAngle'][0] * 0.0174533
-        
-       
-        #roll_ang = cumtrapz(gyr_roll[turn_idx[jj]:turn_idx[jj+1]],t[turn_idx[jj]:turn_idx[jj+1]],initial=0,axis=0)
-        for jj in range(len(ipeaks)-1):
-            #jj = 0
-            
+        for jj in range(len(ipeaks)-1):            
             igyr_boardTrim = igyr_board[ipeaks[jj]:ipeaks[jj+1], :]            
             
-            rotZ = np.array([[cos(rearAng),-sin(rearAng),0], [sin(rearAng),cos(rearAng),0], [0,0,1]])
+            # Rotate the Board to the angle of the boot
+            # Note: positive rotation for goofy, negative for regular
+            if tmpDir == 'Regular':
+                rotZ = np.array([[cos(-frontAng),-sin(-frontAng),0], [sin(-frontAng),cos(-frontAng),0], [0,0,1]])
+            else:
+                rotZ = np.array([[cos(frontAng),-sin(frontAng),0], [sin(frontAng),cos(frontAng),0], [0,0,1]])
         
             igyr_boardRot = (rotZ @ igyr_boardTrim.T).T
-            
-            # plt.figure()
-            # plt.plot(igyr_boardTrim[:,1], label = 'Raw boot gyr')
-            # plt.plot(igyr_boardRot[:,1], label = 'Rotated boot gyr')  
-            # plt.legend()
-            
+                                    
             tmp_boardang=cumulative_trapezoid(igyr_boardRot[:, 1], IMUtime_board[ipeaks[jj]:ipeaks[jj+1]], initial = 0, axis = 0)
             tmp_bootang =cumulative_trapezoid(igyr_boot[ipeaks[jj]:ipeaks[jj+1], 2], IMUtime_boot[ipeaks[jj]:ipeaks[jj+1]], initial = 0, axis = 0)
             
-            if tmpDir == 'Regular':
+            if tmpDir == 'Goofy':
                 tmp_bootang = tmp_bootang*-1
             # Remove drift
             slope_board = tmp_boardang[-1]/(len(tmp_boardang)-1)
@@ -359,13 +312,10 @@ for ii in range(len(Lentries_board)):
             drift_boot = (slope_boot*np.ones([len(tmp_bootang)]))*(np.array(range(len(tmp_bootang))))
             tmp_bootang = tmp_bootang-drift_boot
             
-            # plt.figure()
-            # plt.plot(tmp_bootang, label = 'Boot Angle')
-            # plt.plot(tmp_boardang, label = 'Board Angle')
-            # plt.legend()
-            
             tmp_boot_flex = tmp_bootang-tmp_boardang 
             boot_flex.append(abs(np.min(tmp_boot_flex)))
+            
+            TurnTime.append(IMUtime_board[ipeaks[jj+1]]-IMUtime_board[ipeaks[jj]])
             
             
         # Appending names
@@ -374,13 +324,8 @@ for ii in range(len(Lentries_board)):
         cName = cName + [tmpConfig]*len(tmp_boardtoe)
         TrialNo = TrialNo + [tmpTrialNo]*len(tmp_boardtoe)
         
-
-# Save the trial segmentation
-trial_segment = np.array([trial_name,st_idx,en_idx])
-np.save(fPath+'TrialSeg.npy',trial_segment)
-
 # Save the outcome metrics
-outcomes = pd.DataFrame({'Subject':list(sName),'Config':list(cName),'Order':list(TrialNo),
+outcomes = pd.DataFrame({'Subject':list(sName),'Config':list(cName),'Order':list(TrialNo), 'TurnTime':list(TurnTime),
                          'BoardAngle_ToeTurns':list(boardAng_toe), 'BoardAngle_HeelTurns':list(boardAng_heel), 
                          'BootFlex':list(boot_flex)})  
 
