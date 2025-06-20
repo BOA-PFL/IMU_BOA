@@ -23,7 +23,6 @@ fPath = 'Z:/Testing Segments/Snow Performance/2025_Mech_AlpineRace/IMU/'
 
 # Global variables
 # Filtering
-acc_cut = 10
 gyr_cut = 6
 
 # Debugging variables
@@ -180,14 +179,12 @@ for ii in range(len(Lentries)):
     tmpTrialNo = Lentries[ii].split(sep = "-")[3][0]
     
     Ldf = pd.read_csv(fPath + Lentries[ii],sep=',', header = 0)
-    iacc = np.array(Ldf.iloc[:,2:5])
     igyr = np.array(Ldf.iloc[:,5:8])
     IMUtime = np.array(Ldf.iloc[:,0])
     # Convert the time
     IMUtime = (IMUtime - IMUtime[0])*(1e-6)
     
     if Lentries[ii].count(RIMUno):
-
         # For the right gyro, invert the roll
         print('Right IMU')
         igyr[:,2] = -igyr[:,2] 
@@ -209,7 +206,7 @@ for ii in range(len(Lentries)):
     # Use only the data from the pre-selected region
     TS = int(trial_segment[0]); TE = int(trial_segment[1])
     IMUtime = IMUtime[TS:TE]
-    iacc = iacc[TS:TE,:]; igyr = igyr[TS:TE,:]
+    igyr = igyr[TS:TE,:]
     igyr_det = igyr_det[TS:TE]
     
     #__________________________________________________________________________
