@@ -150,7 +150,7 @@ TurnTime = []
 
 print('This script assumes that the IMU is placed on the leading/front boot')
 
-for ii in range(len(Lentries_board)):
+for ii in range(6,len(Lentries_board)):
     print(Lentries_board[ii])
     # Extract trial information 
     tmpsName = Lentries_board[ii].split(sep = "-")[1]
@@ -300,8 +300,6 @@ for ii in range(len(Lentries_board)):
             tmp_boardang=cumulative_trapezoid(igyr_boardRot[:, 1], IMUtime_board[ipeaks[jj]:ipeaks[jj+1]], initial = 0, axis = 0)
             tmp_bootang =cumulative_trapezoid(igyr_boot[ipeaks[jj]:ipeaks[jj+1], 2], IMUtime_boot[ipeaks[jj]:ipeaks[jj+1]], initial = 0, axis = 0)
             
-            if tmpDir == 'Goofy':
-                tmp_bootang = tmp_bootang*-1
             # Remove drift
             slope_board = tmp_boardang[-1]/(len(tmp_boardang)-1)
             drift_board = (slope_board*np.ones([len(tmp_boardang)]))*(np.array(range(len(tmp_boardang))))
