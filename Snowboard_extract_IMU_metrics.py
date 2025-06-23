@@ -150,7 +150,7 @@ TurnTime = []
 
 print('This script assumes that the IMU is placed on the leading/front boot')
 
-for ii in range(6,len(Lentries_board)):
+for ii in range(len(Lentries_board)):
     print(Lentries_board[ii])
     # Extract trial information 
     tmpsName = Lentries_board[ii].split(sep = "-")[1]
