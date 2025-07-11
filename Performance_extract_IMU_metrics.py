@@ -23,17 +23,17 @@ from tkinter import messagebox
 
 
 # Obtain IMU signals
-fPath = 'C:\\Users\\milena.singletary\\OneDrive - BOA Technology Inc\\General - PFL Team\\Testing Segments\\WorkWear_Performance\\2025_Performance_HighCutPFSWorkwearI_TimberlandPro\\IMU\\'
+fPath = 'Z:\\Testing Segments\\WorkWear_Performance\\2025_Performance_HighCutPFSWorkwearI_TimberlandPro\\IMU\\'
 
-save_on = 1
-debug = 0
+save_on = 0
+debug = 1
 
 # High and Low G accelerometers: note that the gyro is in the low G file
 # Hentries = [fName for fName in os.listdir(fPath) if fName.endswith('highg.csv') ] 
 # Lentries = [fName for fName in os.listdir(fPath) if fName.endswith('lowg.csv')] 
 
-Hentries = [fName for fName in os.listdir(fPath) if fName.endswith('highg.csv') and ('03391') in fName  ] 
-Lentries = [fName for fName in os.listdir(fPath) if fName.endswith('lowg.csv') and ('03391') in fName ] 
+Hentries = [fName for fName in os.listdir(fPath) if fName.endswith('highg.csv') and ('03391') in fName] 
+Lentries = [fName for fName in os.listdir(fPath) if fName.endswith('lowg.csv') and ('03391') in fName] 
 
 # Functions
 def align_fuse_extract_IMU(LGdat,HGdat):
@@ -126,7 +126,7 @@ def estIMU_HS_MS(acc,gyr,t,HS_thresh):
         X,Y,Z gyroscope from the IMU
     t : numpy array (Nx1)
         time (seconds)
-    thresh : float/int
+    HS_thresh : float/int
         threshold for detecting when heel strikes (foot contacts)
 
     Returns
@@ -156,11 +156,6 @@ def estIMU_HS_MS(acc,gyr,t,HS_thresh):
     jj = 400
     
     HS = []
-    # MS = []
-    
-    # cont_pre_vel = np.zeros([len(acc),1])
-    # for jj in range(151,len(acc)):
-    #     cont_pre_vel[jj] = np.trapz(acc_filt[jj-150:jj ,2],t[jj-150:jj])
     
     while jj < len(HS_sig)-1500:
         if HS_sig[jj] > HS_thresh:
@@ -172,10 +167,8 @@ def estIMU_HS_MS(acc,gyr,t,HS_thresh):
                 HS.append(HS_idx)
                 jj = jj+500
         jj = jj+1
-    
-    # HS = np.unique(HS)
-          
-    # Compute the mid-stance indicies
+              
+    # Compute the mid-stance indicies: full "for" loop listed below for debugging
     MS = np.array([(np.argmin(MS_sig[HS[jj]+10:HS[jj]+int((HS[jj+1]-HS[jj])*0.2)])+HS[jj]+10)  for jj in range(len(HS)-1)]) 
     # MS = []
     # for jj in range(len(HS)-1):
@@ -234,7 +227,7 @@ def computeRunSpeedIMU(acc,gyr,HS,MS,GS,t):
     
     run_speed = []
     
-    for count,jj in enumerate(GS):
+    for count, jj in enumerate(GS):
         # Obtain the acceleration and gyroscope from foot contact (HS) to the
         # subsiquent midstance (MS). MS is needed for linear drift correction
         acc_stride_plus = acc_filt[HS[jj]:MS[jj+1],:]
@@ -246,6 +239,7 @@ def computeRunSpeedIMU(acc,gyr,HS,MS,GS,t):
         MS_idx = MS[jj]-HS[jj]
         HS_idx = HS[jj+1]-HS[jj]
         
+        # Compute the unit vector pointing in the approximate direction of gravity
         Fflat_accel = np.mean(acc_stride_plus[MS_idx:MS_idx+MS_frames,:],axis = 0)/np.mean(np.linalg.norm(acc_stride_plus[MS_idx:MS_idx+MS_frames,:],axis = 1)).T
         
         # Rotation to the gravity vector: provides initial contidion for gyro integration
@@ -264,7 +258,7 @@ def computeRunSpeedIMU(acc,gyr,HS,MS,GS,t):
            theta = theta-thetai
            thetai_up = thetai
         else: 
-           theta = theta-(thetai+thetai_up)/2
+           theta = theta-(thetai+thetai_up)/2 # average between the previous step
            thetai_up = thetai
         
         # Convert to radians
@@ -351,15 +345,32 @@ def findRotToLab(accel_vec):
     return theta
 
 def filtIMUsig(sig_in,cut,t):
-    # Set up a 2nd order 50 Hz low pass buttworth filter
+    """
+    Filter 3 axes of an IMU signal (X,Y,Z) with a 2nd order butterworth filter 
+    at the specified cut-off frequency
+
+    Parameters
+    ----------
+    sig_in : numpy array (Nx3)
+        acceleration or gyroscope signal
+    cut : float
+        cut-off frequency
+    t : numpy array
+        time (sec)
+
+    Returns
+    -------
+    sig_out : numpy array (Nx3)
+        filtered signal at the specified cut-off frequency
+    """
+    
+    # Set up a 2nd order low pass buttworth filter
     freq = 1/np.mean(np.diff(t))
     w = cut / (freq / 2) # Normalize the frequency
     b, a = sig.butter(2, w, 'low')
     # Filter the IMU signals
     sig_out = np.array([sig.filtfilt(b, a, sig_in[:,jj]) for jj in range(3)]).T    
     return(sig_out)
-
-
 
 def intp_strides(var,landings,GS):
     """
@@ -391,29 +402,43 @@ def intp_strides(var,landings,GS):
         
     return intp_var
 
+def plotStrides(inputAcc, inputGy, inputLandings, goodLandings):
+    """
+    Function to plot interpolated strides for vertical acceleration and
+    inversion/eversion gyroscope
+    Function dependances: use intp_strides to generate interpolated strides
 
-def plotStep(inputAcc, inputGy, inputLandings, goodLandings):
+    Parameters
+    ----------
+    inputAcc : numpy array
+        Input acceleration. Ex: Vertical acceleration (Nx1)
+    inputGy : numpy array
+        Input gyroscope signal. Ex: inversion/eversion velocity (Nx1) 
+    inputLandings : numpy array
+        Detected landings. From IMU: use estIMU_HS_MS (Mx1)
+    goodLandings : numpy array
+        Filtered landings usually based on stride time (Qx1)
+
+    Returns
+    -------
+    None.
+
+    """
     # plots interpolated stride, acc & gyro
+    plt.figure(101)
     plt.subplot(1,2,1) # first plot
     plt.plot(intp_strides(inputAcc,inputLandings, goodLandings), 'k')
     plt.ylabel('Vertical Acceleration [m/s^2]')
     plt.subplot(1,2,2) # second plot
     plt.plot(intp_strides(inputGy,inputLandings, goodLandings), 'k')
-    plt.ylabel('ML Angular Velocity [deg/s]')
+    plt.ylabel('In/Ev Angular Velocity [deg/s]')
     plt.tight_layout()
 
-# 
+# Storing Variables
 oSubject = []
 oConfig = []
 oSesh = []
-oSpeed = []
-oLabel = []
-setting = []
-oSide = [] 
-
 oMovement = []
-
-
 
 pGyr = []
 pAcc = []
@@ -439,12 +464,9 @@ for ii in range(len(Lentries)):
     Subject = Lentries[ii].split(sep = "-")[0]
     Config = Lentries[ii].split(sep="-")[1] 
     Movement = Lentries[ii].split(sep="-")[2]
-    # Speed = Lentries[ii].split(sep="-")[2]
-    # Slope = Lentries[ii].split(sep="-")[3]
     Sesh = Lentries[ii].split(sep="-")[3][0]
     
-
-    
+    # Fuse the low-g & high-g accelerometers
     [IMUtime,iacc,igyr] = align_fuse_extract_IMU(Ldf,Hdf)
     # Convert the time
     IMUtime = (IMUtime - IMUtime[0])*(1e-6)        
@@ -485,35 +507,17 @@ for ii in range(len(Lentries)):
         
     
     # Exclusion criteria for good strides: Based on step length: for bad detections
-    iGS = np.where((np.diff(iHS_t) > .75)*(np.diff(iHS_t) < 2.0))[0]
+    iGS = np.where((np.diff(iHS_t) > .75)*(np.diff(iHS_t) < 2))[0]
     iHS = iHS[iGS]; iMS = iMS[iGS]
     iHS_t = IMUtime[iHS]
     
-    # For computation purposes:
+    # Further exclude strides to ensure that only consistent strides are used
     iGS = np.where((np.diff(iHS_t) > .75)*(np.diff(iHS_t) < 2))[0]
     
     # Debugging: Creation of dialog box for looking where foot contact are accurate
     answer = True # Defaulting to true: In case "debug" is not used    
     if debug == 1:
-        plotStep(iacc[:,2], igyr[:,1], iHS, iGS)
-        
-        plt.figure()
-        plt.plot(IMUtime,iacc[:,2])
-        plt.plot(iHS_t,iacc[iHS,2],'ro')
-        plt.plot(iHS_t[iGS],iacc[iHS[iGS],2],'ko')
-        plt.ylabel('Vertical Acceleration [m/s^2]')
-        plt.xlabel('Time [sec]')
-        # answer = messagebox.askyesno("Question","Is data clean?")
-        
-        if answer == False:
-            print('Adding file to bad file list')
-            badFileList.append(Lentries[ii])
-        
-        plt.close('all')
-        
-        
-    if save_on == 1:
-        plotStep(iacc[:,2], igyr[:,1], iHS, iGS)
+        plotStrides(iacc[:,2], igyr[:,1], iHS, iGS)
         answer = messagebox.askyesno("Question","Is data clean?")
         saveFolder = fPath + 'IMU_Plots'
         
@@ -521,11 +525,22 @@ for ii in range(len(Lentries)):
             if os.path.exists(saveFolder) == False:
                 os.mkdir(saveFolder)  
             plt.savefig(saveFolder + '/' + Lentries[ii].split(sep="_")[0]  +'.png')
-         
-        plt.close('all')
-    
-
         
+        plt.figure()
+        plt.plot(IMUtime,iacc[:,2])
+        plt.plot(iHS_t,iacc[iHS,2],'ro')
+        plt.plot(iHS_t[iGS],iacc[iHS[iGS],2],'ko')
+        plt.ylabel('Vertical Acceleration [m/s^2]')
+        plt.xlabel('Time [sec]')
+        
+        answer = messagebox.askyesno("Question","Is data clean?")
+        
+        if answer == False:
+            print('Adding file to bad file list')
+            badFileList.append(Lentries[ii])
+        
+    plt.close('all')
+          
     if answer == True:
         print('Estimating point estimates')
         # Compute IMU running speed
@@ -550,14 +565,7 @@ for ii in range(len(Lentries)):
         oSubject = oSubject + [Subject]*len(iGS)
         oConfig = oConfig + [Config]*len(iGS) 
         oMovement = oMovement + [Movement]*len(iGS)
-        
-        # oLabel = oLabel + [Label]*len(iGS)
-        # setting = setting + ['0']*len(iGS)
         oSesh = oSesh + [Sesh]*len(iGS)
-        # if Slope[0] == 'n':
-        #     oSide = oSide + ['L']*len(iGS)
-        # else: 
-        #     oSide = oSide + ['R']*len(iGS)
     
     # Clear variables
     iHS = []; iGS = []
