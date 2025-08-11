@@ -11,16 +11,21 @@ import numpy as np
 from numpy import cos,sin,arctan2
 import scipy
 import scipy.interpolate
-from scipy.integrate import cumtrapz
+from scipy.integrate import cumulative_trapezoid as cumtrapz
 import scipy.signal as sig
 import matplotlib.pyplot as plt
 import os
-import time
 import addcopyfighandler
 from tkinter import messagebox
 
 # Obtain IMU signals
 fPath = 'C:\\Users\\eric.honert\\Boa Technology Inc\\PFL Team - General\\Testing Segments\\AgilityPerformanceData\\PP_Court_TennisPilot_Pilot_Mar24\\IMU\\'
+
+# Load in trial order
+TrialInfo = pd.read_excel('C:\\Users\\eric.honert\\Boa Technology Inc\\PFL Team - General\\Testing Segments\\AgilityPerformanceData\\PP_Court_TennisPilot_Pilot_Mar24\\PP_Court_TennisPilot_Pilot_Mar24.xlsx','TrialOrder')
+TrialInfo['Subject'] = TrialInfo['Subject'].str.lower()
+TrialInfo['Config'] = TrialInfo['Config'].str.lower()
+TrialInfo['Stroke'] = TrialInfo['Stroke'].str.lower()
 
 save_on = 1
 debug = 0
@@ -343,7 +348,25 @@ def findRotToLab(accel_vec):
     return theta
 
 def filtIMUsig(sig_in,cut,t):
-    # Set up a 2nd order 50 Hz low pass buttworth filter
+    """
+    Filter 3 axes of an IMU signal (X,Y,Z) with a 2nd order butterworth filter 
+    at the specified cut-off frequency
+
+    Parameters
+    ----------
+    sig_in : numpy array (Nx3)
+        acceleration or gyroscope signal
+    cut : float
+        cut-off frequency
+    t : numpy array
+        time (sec)
+
+    Returns
+    -------
+    sig_out : numpy array (Nx3)
+        filtered signal at the specified cut-off frequency
+    """
+    # Set up a 2nd order low pass buttworth filter
     freq = 1/np.mean(np.diff(t))
     w = cut / (freq / 2) # Normalize the frequency
     b, a = sig.butter(2, w, 'low')
@@ -357,6 +380,7 @@ oConfig = []
 oStroke = []
 oSide = []
 oSpeed = np.array([])
+otrialOrder = []
 
 pGyr = []
 pJerk = []
@@ -383,13 +407,20 @@ for ii in range(0,len(Lentries)):
             hg_trial = jj
     
     if hg_yes == 1:
+        # Extract Trial Information
+        Subject = Lentries[ii].split('-')[0].lower()
+        Config = Lentries[ii].split('-')[2].lower()
+        Stroke = Lentries[ii].split('-')[3].lower()
+        trialNo = Lentries[ii].split('-')[4][0]
+        
+        tmptrialOrder = np.array(TrialInfo[(TrialInfo['Subject'] == Subject)*(TrialInfo['Config'] == Config)*(TrialInfo['Stroke'] == Stroke)*(TrialInfo['TrialNo'] == int(trialNo))].TrialOrder)
+        
+        if len(tmptrialOrder) == 0:
+            print('oooops')
+        
         # Load the trials here
         Ldf = pd.read_csv(fPath + Lentries[ii],sep=',', header = 0)
         Hdf = pd.read_csv(fPath + Hentries[hg_trial],sep=',', header = 0)
-        
-        Subject = Lentries[ii].split('-')[0]
-        Config = Lentries[ii].split('-')[2].lower()
-        Stroke = Lentries[ii].split('-')[3].lower()
         
         # Align & fuse the high and low-g accelerometer signals. Extract time
         # and gyro as well.
@@ -424,17 +455,8 @@ for ii in range(0,len(Lentries)):
         #__________________________________________________________________________  
         # Identify foot contact & midstance
         [iHS,iMS] = estIMU_HS_MS(iacc,igyr,IMUtime)
-        # Generally, the first 3 detected HS are from hops (manually checked as well)
         iHS_t = IMUtime[iHS]
         iMS_t = IMUtime[iMS]
-        
-        # test_sig = abs(iacc[:,2])
-        # store = []
-        # for jj in iHS:
-        #     store.append(sum(test_sig[jj-200:jj]))
-        # plt.figure(1)
-        # plt.plot(iHS_t,store)
-        
         # Note: reducing threshold for good strides
         iGS = np.where((np.diff(iHS) > 0.25)*(np.diff(iHS_t) < 1.0))[0]
         iGS = iGS[:-2]
@@ -445,8 +467,6 @@ for ii in range(0,len(Lentries)):
             plt.figure(1)
             plt.plot(IMUtime,iacc[:,0])
             plt.plot(IMUtime,abs(iacc[:,2]))
-            # plt.plot(IMUtime,iacc[:,1])
-            # plt.plot(IMUtime,accmag)
             plt.plot(iHS_t,iacc[iHS,0],'ro')
             plt.plot(iHS_t[iGS],iacc[iHS[iGS],0],'k^')
             plt.ylabel('Vertical Acceleration [m/s^2]')
@@ -494,13 +514,12 @@ for ii in range(0,len(Lentries)):
                 oSide = oSide + ['L']*len(iGS)
             oSpeed = np.concatenate((oSpeed,ispeed),axis = None)
             oStroke = oStroke + [Stroke]*len(iGS)
-        
-            # 1
+            otrialOrder.extend([str(tmptrialOrder[0])]*len(iGS))
     else:
         print('no hg trial')
     
     
-outcomes = pd.DataFrame({'Subject':list(oSubject), 'Side':list(oSide),'Stroke':list(oStroke), 'Config': list(oConfig), 
+outcomes = pd.DataFrame({'Subject':list(oSubject), 'Side':list(oSide),'Stroke':list(oStroke), 'Config': list(oConfig), 'TrialOrder':list(otrialOrder),
                           'pJerk':list(pJerk), 'pAcc':list(pAcc), 'pGyr':list(pGyr),'rMLacc':list(rMLacc),'rIEgyro':list(rIEgyro),'pIEgyro':list(pIEgyro),'imuSpeed':list(oSpeed)})
 
 if save_on == 1:

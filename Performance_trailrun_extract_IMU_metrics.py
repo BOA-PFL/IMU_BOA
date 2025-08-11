@@ -18,21 +18,20 @@ import numpy as np
 from numpy import cos,sin,arctan2
 import scipy
 import scipy.interpolate
-from scipy.integrate import cumtrapz
+from scipy.integrate import cumulative_trapezoid as cumtrapz
 import scipy.signal as sig
 import matplotlib.pyplot as plt
 import os
-import time
 import addcopyfighandler
 from tkinter import messagebox
 
 # Grab the GPS data for the timing of segments
-GPStiming = pd.read_csv('C:\\Users\\milena.singletary\\Boa Technology Inc\\PFL Team - Documents\\General\\Testing Segments\\EndurancePerformance\\EH_Trail_Kailas_Perf_Jun24\\GPS\\CombinedGPS.csv')
+GPStiming = pd.read_csv('Z:\\Testing Segments\\EndurancePerformance\\2024\\EH_Trail_Kailas_Perf_Jun24\\GPS\\CombinedGPS.csv')
 # Obtain IMU signals
-#fPath = 'Z:\\Testing Segments\\EndurancePerformance\\EH_Trail_HeelLockTrail_Perf_May23\\IMU\\'
-fPath = 'C:\\Users\\milena.singletary\\Boa Technology Inc\\PFL Team - Documents\\General\\Testing Segments\\EndurancePerformance\\EH_Trail_Kailas_Perf_Jun24\\IMU\\'
 
-save_on = 1
+fPath = 'Z:\\Testing Segments\\EndurancePerformance\\2024\\EH_Trail_Kailas_Perf_Jun24\\IMU\\'
+
+save_on = 0
 debug = 1
 
 # Right High and Low G accelerometers: note that the gyro is in the low G file
@@ -40,6 +39,30 @@ RHentries = [fName for fName in os.listdir(fPath) if fName.endswith('highg.csv')
 RLentries = [fName for fName in os.listdir(fPath) if fName.endswith('lowg.csv') and fName.count('04116')]
 
 # Functions
+def delimitTrialIMU(SegSig):
+    """
+    Function to crop the data
+
+    Parameters
+    ----------
+    SegSig : dataframe
+        The signal that will allow for segmentation
+
+    Returns
+    -------
+    segidx: array
+        Segmentation indices
+
+    """
+    print('Select 2 points: the start and end of the trial')
+    fig, ax = plt.subplots()
+    ax.plot(SegSig, label = 'Segmenting Signal')
+    fig.legend()
+    pts = np.asarray(plt.ginput(2, timeout=40))
+    plt.close()
+    segidx = pts[:,0]
+    return(segidx)
+
 def align_fuse_extract_IMU(LGdat,HGdat):
     """
     Function to align, fuse, and extract all IMU information
@@ -118,7 +141,7 @@ def align_fuse_extract_IMU(LGdat,HGdat):
     
     return [LGtime,acc,gyr]
 
-def estIMU_HS_MS(acc,gyr,t):
+def estIMU_HS_MS(acc,gyr,t,HS_thresh):
     """
     Function to estimate heel-strike and mid-stance indices from the IMU
 
@@ -130,6 +153,8 @@ def estIMU_HS_MS(acc,gyr,t):
         X,Y,Z gyroscope from the IMU
     t : numpy array (Nx1)
         time (seconds)
+    HS_thresh : float/int
+        threshold for detecting when heel strikes (foot contacts)
 
     Returns
     -------
@@ -156,33 +181,29 @@ def estIMU_HS_MS(acc,gyr,t):
     acc_filt = np.array([sig.filtfilt(b, a, acc[:,jj]) for jj in range(3)]).T
 
     window = 200
-    jj = 200
-    
-    apsig = acc_filt[:,2]
-    APsum_thresh = 1500
+    jj = 400
     
     HS = []
-    # MS = []
     
-    while jj < len(HS_sig)-1000:
-        if HS_sig[jj] > 5e7:
-            if sum(abs(apsig[jj-200:jj])) > APsum_thresh:
-                # Find the maximum
-                HS_idx = np.argmin(acc[jj-window:jj+window,0])
-                HS.append(jj-window+HS_idx)
-                jj = jj-window+HS_idx+300
+    while jj < len(HS_sig)-1500:
+        if HS_sig[jj] > HS_thresh:
+            # Find the maximum
+            jj = np.argmax(HS_sig[jj:jj+window])+jj         
+            HS_idx = np.argmax(acc[jj-window:jj+window,2])+jj-window
+            pre_vel = np.trapz(acc_filt[HS_idx-150:HS_idx ,2],t[HS_idx-150:HS_idx])
+            if pre_vel < -0.5 and acc[HS_idx,2] > 2:
+                HS.append(HS_idx)
+                jj = jj+500
         jj = jj+1
-      
-    
-    HS = np.unique(HS)        
-    HS = np.array(HS[:-1])    
 
-    # Compute the mid-stance indicies
+    # Compute the mid-stance indicies: full "for" loop listed below for debugging
     MS = np.array([(np.argmin(MS_sig[HS[jj]:HS[jj]+int((HS[jj+1]-HS[jj])*0.5)])+HS[jj])  for jj in range(len(HS)-1)]) 
     # MS = []
     # for jj in range(len(HS)-1):
     #     print(jj)
     #     MS.append(np.argmin(MS_sig[HS[jj]+10:HS[jj]+int((HS[jj+1]-HS[jj])*0.2)])+HS[jj]+10)
+    
+    HS = np.array(HS[:-1])  
         
     
     return [HS,MS]
@@ -248,6 +269,7 @@ def computeRunSpeedIMU(acc,gyr,HS,MS,GS,t):
         MS_idx = MS[jj]-HS[jj]
         HS_idx = HS[jj+1]-HS[jj]
         
+        # Compute the unit vector pointing in the approximate direction of gravity
         Fflat_accel = np.mean(acc_stride_plus[MS_idx:MS_idx+MS_frames,:],axis = 0)/np.mean(np.linalg.norm(acc_stride_plus[MS_idx:MS_idx+MS_frames,:],axis = 1)).T
         
         # Rotation to the gravity vector: provides initial contidion for gyro integration
@@ -261,13 +283,12 @@ def computeRunSpeedIMU(acc,gyr,HS,MS,GS,t):
         drift = (slope*np.ones([len(theta),3]))*(np.array([range(len(theta)),range(len(theta)),range(len(theta))])).T
         drift = drift-drift[MS_idx,:]
         theta = theta - drift
-        
         # Gyro integration initial condition
         if count == 0:
            theta = theta-thetai
            thetai_up = thetai
         else: 
-           theta = theta-(thetai+thetai_up)/2
+           theta = theta-(thetai+thetai_up)/2 # average between the previous step
            thetai_up = thetai
         
         # Convert to radians
@@ -354,13 +375,61 @@ def findRotToLab(accel_vec):
     return theta
 
 def filtIMUsig(sig_in,cut,t):
-    # Set up a 2nd order 50 Hz low pass buttworth filter
+    """
+    Filter 3 axes of an IMU signal (X,Y,Z) with a 2nd order butterworth filter 
+    at the specified cut-off frequency
+    
+    Parameters
+    ----------
+    sig_in : numpy array (Nx3)
+        acceleration or gyroscope signal
+    cut : float
+        cut-off frequency
+    t : numpy array
+        time (sec)
+    
+    Returns
+    -------
+    sig_out : numpy array (Nx3)
+        filtered signal at the specified cut-off frequency
+    """
+    # Set up a 2nd order low pass buttworth filter
     freq = 1/np.mean(np.diff(t))
     w = cut / (freq / 2) # Normalize the frequency
     b, a = sig.butter(2, w, 'low')
     # Filter the IMU signals
     sig_out = np.array([sig.filtfilt(b, a, sig_in[:,jj]) for jj in range(3)]).T    
     return(sig_out)
+
+def intp_strides(var,landings,GS):
+    """
+    Function to interpolate the variable of interest across a stride
+    (from foot contact to subsiquent foot contact) in order to plot the 
+    variable of interest over top each other
+
+    Parameters
+    ----------
+    var : list or numpy array
+        Variable of interest. Can be taken from a dataframe or from a numpy array
+    landings : list
+        Foot contact indicies
+
+    Returns
+    -------
+    intp_var : numpy array
+        Interpolated variable to 101 points with the number of columns dictated
+        by the number of strides.
+
+    """
+    # Preallocate
+    intp_var = np.zeros((101,len(GS)-1))
+    # Index through the strides
+    for ii in range(len(GS)-1):
+        dum = var[landings[GS[ii]]:landings[GS[ii]+1]]
+        f = scipy.interpolate.interp1d(np.arange(0,len(dum)),dum)
+        intp_var[:,ii] = f(np.linspace(0,len(dum)-1,101))
+        
+    return intp_var
 
 # Preallocate variables
 oSubject = []
@@ -386,7 +455,7 @@ gyr_cut = 30
 # Index through the GPS file as that has all entries possible
 for ii in range(0,len(GPStiming)):
     # Find the correct files if there
-    GPSstr = GPStiming.Subject[ii] + '-' + GPStiming.Config[ii] + '-Trail-'  + str(ii+1)
+    GPSstr = GPStiming.Subject[ii] + '-' + GPStiming.Config[ii]  + '-' + str(GPStiming.Sesh[ii])
     
     # Check to make sure there is an IMU trial for for the selected GPS trial 
     GoodTrial = 0; Rtrial = []
@@ -405,12 +474,27 @@ for ii in range(0,len(GPStiming)):
         # Align & fuse the high and low-g accelerometer signals. Extract time
         # and gyro as well.
         [Rtime,Racc,Rgyr] = align_fuse_extract_IMU(RLdf,RHdf)
-        
+        #______________________________________________________________________
+        # Trial Segmentation
+        if os.path.exists(fPath+RLentries[ii]+'TrialSeg.npy'):
+            # Load the trial segmentation
+            trial_segment = np.load(fPath+RLentries[ii]+'TrialSeg.npy', allow_pickle =True)
+        else:
+            # Segment the trial based on the gyroscope deteciton signal
+            trial_segment = delimitTrialIMU(Racc[:,2])
+            # Save the trial segmentation
+            np.save(fPath+RLentries[ii]+'TrialSeg.npy',trial_segment)
+        #______________________________________________________________________
+        # Use only the data from the pre-selected region
+        TS = int(trial_segment[0]); TE = int(trial_segment[1])
+        Rtime = Rtime[TS:TE]
+        Racc = Racc[TS:TE,:]; Rgyr = Rgyr[TS:TE,:]
+        #______________________________________________________________________        
         # Convert the time
         Rtime = (Rtime - Rtime[0])*(1e-6)
         
         # Identify foot contact & midstance
-        [RHS,RMS] = estIMU_HS_MS(Racc,Rgyr,Rtime)
+        [RHS,RMS] = estIMU_HS_MS(Racc,Rgyr,Rtime,5e7)
         # Generally, the first 3 detected HS are from hops (manually checked as well)
         R_start = Rtime[RHS[2]]
         RHS = RHS[3:]; RHS_t = Rtime[RHS]
@@ -420,11 +504,58 @@ for ii in range(0,len(GPStiming)):
         RGS = np.where((np.diff(RHS) > 0.5)*(np.diff(RHS_t) < 1.5))[0]
         answer = True # Defaulting to true: In case "debug" is not used
         if debug == 1:
-            plt.plot(Rtime,Racc[:,0])
-            plt.plot(RHS_t,Racc[RHS,0],'ro')
-            plt.plot(RHS_t[RGS],Racc[RHS[RGS],0],'ko')
+            # Examine foot contact detections:
+            plt.plot(Rtime,Racc[:,2])
+            plt.plot(RHS_t,Racc[RHS,2],'ro')
+            plt.plot(RHS_t[RGS],Racc[RHS[RGS],2],'ko')
             plt.ylabel('Vertical Acceleration [m/s^2]')
             plt.xlabel('Time [sec]')
+            # Look at acceleration and gyro for each different section
+            GS_up = []; GS_top = []; GS_dwn = []
+            for jj in RGS:
+                if RHS_t[jj] < float(GPStiming.EndS1[ii]+R_start):
+                    GS_up.append(jj)
+                elif RHS_t[jj] > float(GPStiming.StartS2[ii]+R_start) and RHS_t[jj] < float(GPStiming.EndS2[ii]+R_start):
+                    GS_top.append(jj)
+                elif RHS_t[jj] > float(GPStiming.StartS3[ii]+R_start):
+                    GS_dwn.append(jj)
+            
+            plt.figure(101)
+            plt.subplot(2,3,1)
+            plt.plot(intp_strides(Racc[:,2],RHS, GS_up))
+            plt.ylabel('Vertical Acceleration [m/s^2]')
+            plt.title('Uphill')
+            
+            plt.subplot(2,3,2)
+            plt.plot(intp_strides(Racc[:,2],RHS, GS_top))
+            plt.title('Top')
+            
+            plt.subplot(2,3,3)
+            plt.plot(intp_strides(Racc[:,2],RHS, GS_dwn))
+            plt.title('Downhill')
+            
+            plt.subplot(2,3,4)
+            plt.plot(intp_strides(Rgyr[:,1],RHS, GS_up))
+            plt.ylabel('In/Ev Gyro [deg/s]')
+            plt.xlabel('% Stride')
+            
+            plt.subplot(2,3,5)
+            plt.plot(intp_strides(Rgyr[:,1],RHS, GS_top))
+            plt.xlabel('% Stride')
+            
+            plt.subplot(2,3,6)
+            plt.plot(intp_strides(Rgyr[:,1],RHS, GS_dwn))
+            plt.xlabel('% Stride')
+            plt.tight_layout()
+            
+            saveFolder = fPath + 'IMU_Plots'
+            
+            if answer == True:
+                if os.path.exists(saveFolder) == False:
+                    os.mkdir(saveFolder)  
+                plt.savefig(saveFolder + '/' + RLentries[ii].split(sep="_")[0]  +'.png')
+            
+            
             answer = messagebox.askyesno("Question","Is data clean?")
             plt.close('all')
         
