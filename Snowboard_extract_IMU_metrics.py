@@ -25,6 +25,8 @@ fPath = 'Z:\\Testing Segments\\Snow Performance\\2024\\EH_Snowboard_BurtonWrap_P
 
 Lentries_board = [fName for fName in os.listdir(fPath) if fName.endswith('lowg.csv') and (fName.count('04116') or fName.count('03399') or fName.count('04580'))]
 Lentries_boot = [fName for fName in os.listdir(fPath) if fName.endswith('lowg.csv') and fName.count('04241')]
+Lentries_shank = [fName for fName in os.listdir(fPath) if fName.endswith('lowg.csv') and (fName.count('03399'))]
+
         
 bindingDat = pd.read_excel('Z:\\Testing Segments\\Snow Performance\\2024\\EH_Snowboard_BurtonWrap_Perf_Dec2024/QualData.xlsx', 'Qual')
 bindingDat = bindingDat.iloc[:,:5].dropna()
@@ -141,6 +143,9 @@ trial_name = []
 boardAng_toe = []
 boardAng_heel= []
 boot_flex = []
+shankAng_toe = []
+shankAng_heel = []
+
 
 sName = []
 cName = []
@@ -168,10 +173,25 @@ for ii in range(len(Lentries_board)):
     Ldf_boot = pd.read_csv(fPath + Lentries_boot[ii], sep = ',', header = 0)
     igyr_boot = np.array(Ldf_boot.iloc[:,5:8])
     IMUtime_boot = np.array(Ldf_boot.iloc[:,0])
+    
+    # Define Shank data
+    Ldf_shank = pd.read_csv(fPath + Lentries_shank[ii], sep = ',', header = 0)
+    igyr_shank = np.array(Ldf_shank.iloc[:,5:8]) 
+    IMUtime_shank = np.array(Ldf_shank.iloc[:,0])
 
     # Convert the time
     IMUtime_board = (IMUtime_board - IMUtime_board[0])*(1e-6)
     IMUtime_boot = (IMUtime_boot - IMUtime_boot[0])*(1e-6)
+    IMUtime_shank = (IMUtime_shank - IMUtime_shank[0])*(1e-6)
+    
+    # Assess IMUtime to make sure nothing is up with sampling rate
+    tmbd = len(IMUtime_board)
+    tmbt = len(IMUtime_boot)
+    tms = len(IMUtime_shank)
+    IMUlistl = [tmbd, tmbt,tms]
+    
+    
+    
     
     # Detection signal based on the angular velocity of the snowboard shifting
     # while turning from the heel to toe edges of the snowboard
@@ -224,6 +244,66 @@ for ii in range(len(Lentries_board)):
     
     igyr_det = filtIMUsig(igyr_board,0.5,IMUtime_board)
     igyr_det = igyr_det[:,1]      
+    
+    
+    #################################################
+    # align shank IMU to already aligned boot/board signals
+  
+    corr = sig.correlate(igyr_boot[:,2],igyr_shank[:,2], mode = 'full')     
+    lags = sig.correlation_lags(len(igyr_boot[:,2]),len(igyr_shank[:,2]),mode='full')
+    
+    # plt.figure()
+    # plt.plot(lags, corr)
+    lag = lags[np.argmax(corr)]
+    
+    if lag > 0:
+        igyr_shank = igyr_shank[:-lag,:]
+        IMUtime_shank = IMUtime_shank[:-lag]
+        
+    elif lag < 0:
+        igyr_shank = igyr_shank[-lag:,:]
+        IMUtime_shank = IMUtime_shank[-lag:]
+    
+    # quick check to make sure signals are aligned
+    plt.figure()
+    plt.plot(igyr_boot[:,2], label = 'shifted boot gyr')
+    plt.plot(igyr_board[:,1], label = 'shifted board gyr')
+    plt.plot(igyr_shank[:,2], label = 'shifted shank gyr')
+    plt.legend()
+    answer = messagebox.askyesno("Question","Do Signals Align?") 
+
+    if answer == False:
+        # igyr_shankSig= igyr_shank[:,2] *-1 # flip only the Z axis, if IMU placed upside down
+        igyr_shankSig = igyr_shank[:,1] *-1 # flip only the Y axis, if IMU rotated clockwise
+        
+        corr = sig.correlate(igyr_boot[:,2],igyr_shankSig, mode = 'full')    
+            
+        lags = sig.correlation_lags(len(igyr_boot[:,2]),len(igyr_shankSig),mode='full')
+        
+        plt.figure()
+        plt.plot(lags, corr)
+        lag = lags[np.argmax(corr)]
+        
+        if lag > 0:
+            igyr_shankSig = igyr_shankSig[:-lag,:]
+            IMUtime_shank = IMUtime_shank[:-lag]
+            
+        elif lag < 0:
+            igyr_shankSig = igyr_shankSig[-lag:,:]
+            IMUtime_shank = IMUtime_shank[-lag:]
+    
+        plt.figure()
+        plt.plot(igyr_boot[:,2], label = 'shifted boot gyr')
+        plt.plot(igyr_board[:,1], label = 'shifted board gyr')
+        plt.plot(igyr_shankSig, label = 'shifted shank gyr')
+        plt.legend()
+        answer = messagebox.askyesno("Question","Do Signals Align?") 
+    
+    
+    
+    
+    
+    
     #__________________________________________________________________________
     # Turn detection
     ipeaks,_ = sig.find_peaks(igyr_det, height = 10, distance = 200) # create a function to filter out double peak detections.
@@ -254,6 +334,7 @@ for ii in range(len(Lentries_board)):
         plt.subplot(1,2,1)
         plt.plot(igyr_boot[:,2], label = 'shifted boot gyr')
         plt.plot(igyr_board[:,1], label = 'shifted board gyr')
+        plt.plot(igyr_shank[:,2], label = 'shifted shank gyr')
         plt.legend()
         plt.title('XCorr Check: Shifted Frames:'+str(lag))
         plt.ylabel('Angular Velocity (deg/sec)')
@@ -313,6 +394,11 @@ for ii in range(len(Lentries_board)):
             tmp_boot_flex = tmp_bootang-tmp_boardang 
             boot_flex.append(abs(np.min(tmp_boot_flex)))
             
+            
+            ## add shank metrics
+            # shankAng_toe = 
+            # shankAng_heel =
+            
             TurnTime.append(IMUtime_board[ipeaks[jj+1]]-IMUtime_board[ipeaks[jj]])
             
             
@@ -325,6 +411,7 @@ for ii in range(len(Lentries_board)):
 # Save the outcome metrics
 outcomes = pd.DataFrame({'Subject':list(sName),'Config':list(cName),'Order':list(TrialNo), 'TurnTime':list(TurnTime),
                          'BoardAngle_ToeTurns':list(boardAng_toe), 'BoardAngle_HeelTurns':list(boardAng_heel), 
+                         # 'ShankAngle_ToeTurns':list(shankAng_toe), 'ShankAngle_HeelTurns':list(shankAng_heel), 
                          'BootFlex':list(boot_flex)})  
 
 
