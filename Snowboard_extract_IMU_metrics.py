@@ -17,7 +17,9 @@ import scipy.signal as sig
 import matplotlib.pyplot as plt
 import os
 # import addcopyfighandler
-from tkinter import messagebox 
+from tkinter import messagebox
+
+from IMUFunctions import delimitTrialIMU, filtIMUsig
 
 
 # Obtain IMU signals
@@ -41,58 +43,6 @@ debug = 1
 save_on = 0
 
 # Functions
-def delimitTrialIMU(SegSig):
-    """
-    Function to crop the data
-
-    Parameters
-    ----------
-    SegSig : dataframe
-        The signal that will allow for segmentation
-
-    Returns
-    -------
-    segidx: array
-        Segmentation indices
-
-    """
-    print('Select 2 points: the start and end of the trial')
-    fig, ax = plt.subplots()
-    ax.plot(SegSig, label = 'Segmenting Signal')
-    fig.legend()
-    pts = np.asarray(plt.ginput(2, timeout=40))
-    plt.close()
-    segidx = pts[:,0]
-    return(segidx)
-
-def filtIMUsig(sig_in,cut,t):
-    """
-    Filter 3 axes of an IMU signal (X,Y,Z) with a 2nd order butterworth filter 
-    at the specified cut-off frequency
-
-    Parameters
-    ----------
-    sig_in : numpy array (Nx3)
-        acceleration or gyroscope signal
-    cut : float
-        cut-off frequency
-    t : numpy array
-        time (sec)
-
-    Returns
-    -------
-    sig_out : numpy array (Nx3)
-        filtered signal at the specified cut-off frequency
-
-    """
-    # Set up a 2nd order low pass buttworth filter
-    freq = 1/np.mean(np.diff(t))
-    w = cut / (freq / 2) # Normalize the frequency
-    b, a = sig.butter(2, w, 'low')
-    # Filter the IMU signals
-    sig_out = np.array([sig.filtfilt(b, a, sig_in[:,jj]) for jj in range(3)]).T    
-    return(sig_out)
-
 def findEdgeAng_gyr(gyr_roll,t,turn_idx):
     """
     Using the gyroscope, compute the maximum edge angles by integrating the
