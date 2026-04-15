@@ -17,6 +17,8 @@ import os
 import addcopyfighandler
 from tkinter import messagebox
 
+from IMUFunctions import filtIMUsig
+
 # Obtain IMU signals
 fPath = 'Z:\\Testing Segments\\WorkWear_Performance\\EH_Workwear_MidCutStabilityII_CPDMech_Sept23\\IMU\\'
 
@@ -63,34 +65,6 @@ def estIMU_singleleg_landings(acc,t,HS_thresh):
         jj = jj+1
     
     return HS
-
-def filtIMUsig(sig_in,cut,t):
-    """
-    Filter nx3 IMU signals
-
-    Parameters
-    ----------
-    sig_in : numpy array (Nx3)
-        Signal with x,y,z components
-    cut : float
-        cut-off frequency
-    t : numpy array or list
-        time array
-
-    Returns
-    -------
-    sig_out : numpy array
-        Filtered signal
-
-    """
-    # Set up a 2nd order 50 Hz low pass buttworth filter
-    freq = 1/np.mean(np.diff(t))
-    w = cut / (freq / 2) # Normalize the frequency
-    b, a = sig.butter(2, w, 'low')
-    # Filter the IMU signals
-    sig_out = np.array([sig.filtfilt(b, a, sig_in[:,jj]) for jj in range(3)]).T    
-    return(sig_out)
-
 
 
 # 

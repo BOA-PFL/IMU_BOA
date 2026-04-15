@@ -21,6 +21,8 @@ import time
 import addcopyfighandler
 from tkinter import messagebox
 
+from IMUFunctions import filtIMUsig
+
 # Obtain IMU signals
 fPath = 'C:/Users/eric.honert/Boa Technology Inc/PFL Team - General/Testing Segments/Snow Performance/EH_Alpine_FullBootvsShell_Mech_Jan2024/IMU/'
 
@@ -119,15 +121,6 @@ def align_fuse_extract_IMU_angles(LGdat,HGdat):
         acc[idx,jj] = resamp_HG[idx,jj]
     
     return [LGtime,acc,gyr,glo_ang]
-
-def filtIMUsig(sig_in,cut,t):
-    # Set up a 2nd order 50 Hz low pass buttworth filter
-    freq = 1/np.mean(np.diff(t))
-    w = cut / (freq / 2) # Normalize the frequency
-    b, a = sig.butter(2, w, 'low')
-    # Filter the IMU signals
-    sig_out = np.array([sig.filtfilt(b, a, sig_in[:,jj]) for jj in range(3)]).T    
-    return(sig_out)
 
 def findEdgeAng_gyr(gyr_roll,t,turn_idx):
     
