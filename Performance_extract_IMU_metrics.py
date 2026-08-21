@@ -26,17 +26,17 @@ from IMUFunctions import (align_fuse_extract_IMU, findRotToLab, filtIMUsig,
 
 
 # Obtain IMU signals
-fPath = 'Z:\\Testing Segments\\WorkWear\\2025\\2025_Performance_HighCutPFSWorkwearI_TimberlandPro\\IMU\\'
+fPath = 'C:\\Users\\max.ferguson\\OneDrive - BOA Technology Inc\\PFL Team - General\\Testing Segments\\Outdoor\\TrailRunning\\2026_Performance_Kailas\\IMU\\'
 
-save_on = 0
+save_on = 1
 debug = 1
 
 # High and Low G accelerometers: note that the gyro is in the low G file
 # Hentries = [fName for fName in os.listdir(fPath) if fName.endswith('highg.csv') ] 
 # Lentries = [fName for fName in os.listdir(fPath) if fName.endswith('lowg.csv')] 
 
-Hentries = [fName for fName in os.listdir(fPath) if fName.endswith('highg.csv') and ('03391') in fName] 
-Lentries = [fName for fName in os.listdir(fPath) if fName.endswith('lowg.csv') and ('03391') in fName] 
+Hentries = [fName for fName in os.listdir(fPath) if fName.endswith('highg.csv') and ('04241') in fName] 
+Lentries = [fName for fName in os.listdir(fPath) if fName.endswith('lowg.csv') and ('04241') in fName] 
 
 # Functions
 def estIMU_HS_MS(acc,gyr,t,HS_thresh):
@@ -74,10 +74,10 @@ def estIMU_HS_MS(acc,gyr,t,HS_thresh):
     # HS_sig = (np.gradient(acc_filt[:,2],t))**2
     gyr_energy = (np.linalg.norm(gyr,axis=1))**2
     # Create a midstance detection signal
-    idx = np.linalg.norm(acc,axis = 1) > 2.5*9.81 # Only want values above 2g as they will be excluded, may need to reduce this threshold
+    idx = np.linalg.norm(acc,axis = 1) > 8*9.81 # Only want values above 2g as they will be excluded, may need to reduce this threshold
     MS_sig = gyr_energy
     MS_sig[idx] = 1e6
-    window = 200
+    window = 100
     jj = 400
     
     HS = []
@@ -88,9 +88,9 @@ def estIMU_HS_MS(acc,gyr,t,HS_thresh):
             jj = np.argmax(HS_sig[jj:jj+window])+jj         
             HS_idx = np.argmax(acc[jj-window:jj+window,2])+jj-window
             pre_vel = np.trapezoid(acc_filt[HS_idx-150:HS_idx ,2],t[HS_idx-150:HS_idx])
-            if pre_vel < -0.5 and acc[HS_idx,2] > 2:
+            if pre_vel < 1 and acc[HS_idx,2] > 5:
                 HS.append(HS_idx)
-                jj = jj+500
+                jj = jj+300
         jj = jj+1
               
     # Compute the mid-stance indicies: full "for" loop listed below for debugging
@@ -135,6 +135,7 @@ def plotStrides(inputAcc, inputGy, inputLandings, goodLandings):
     plt.plot(intp_strides(inputGy,inputLandings, goodLandings), 'k')
     plt.ylabel('In/Ev Angular Velocity [deg/s]')
     plt.tight_layout()
+    plt.show()
 
 # Storing Variables
 oSubject = []
@@ -148,6 +149,8 @@ pJerk = []
 rMLacc = []
 rIEgyro = []
 pIEgyro = []
+pEgyro = []
+pIgyro = []
 imuSpeed = []
 
 badFileList = []
@@ -184,7 +187,7 @@ for ii in range(len(Lentries)):
     jc = 0  # jump counter
     stc = 0 # start trial counter
     jj = 0
-    up_thresh = 5e6 # This threshold should be modulated based on running or walking
+    up_thresh = 3e6 # This threshold should be modulated based on running or walking
     
     
     # Algorithm to detect 3 hops - may need to be updated
@@ -241,7 +244,7 @@ for ii in range(len(Lentries)):
             print('Adding file to bad file list')
             badFileList.append(Lentries[ii])
         
-    plt.close('all')
+    # plt.close('all')
           
     if answer == True:
         print('Estimating point estimates')
@@ -262,6 +265,10 @@ for ii in range(len(Lentries)):
             rIEgyro.append(np.max(igyr[iHS[jj]:appTO,2])-np.min(igyr[iHS[jj]:appTO,2]))
             # Assuming this is the left foot
             pIEgyro.append(np.max(igyr[iHS[jj]:appTO,2]))
+            pEgyro.append(np.abs(np.min(igyr[iHS[jj]:appTO,2])))
+            pIgyro.append(-np.max(igyr[iHS[jj]:appTO,2]))               # Check directionality - use commented version if they are negative versions of expected values
+            #pEgyro.append(np.max(igyr[iHS[jj]:appTO,2]))
+            #pIgyro.append(np.min(igyr[iHS[jj]:appTO,2]))     # already negative
             
         # Appending
         oSubject = oSubject + [Subject]*len(iGS)
@@ -274,7 +281,9 @@ for ii in range(len(Lentries)):
     
 outcomes = pd.DataFrame({'Subject':list(oSubject), 'Config': list(oConfig), 'Movement':list(oMovement),
                          'Order': list(oSesh), 'pJerk':list(pJerk),'pAcc':list(pAcc), 'pGyr':list(pGyr),
-                           'rMLacc':list(rMLacc),'rIEgyro':list(rIEgyro),'pIEgyro':list(pIEgyro) ,'imuSpeed':list(imuSpeed)})
+                           'rMLacc':list(rMLacc),'rIEgyro':list(rIEgyro),'pIEgyro':list(pIEgyro), 'pIgyro':list(pIgyro),'pEgyro':list(pEgyro),'imuSpeed':list(imuSpeed)})
+
+
 
 
 if save_on == 1:
