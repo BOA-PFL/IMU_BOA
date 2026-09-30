@@ -21,7 +21,7 @@ import os
 import addcopyfighandler
 from tkinter import messagebox
 
-from IMUFunctions import (align_fuse_extract_IMU, findRotToLab, filtIMUsig,
+from IMUFunctions import (estIMU_FC_MS_walking, align_fuse_extract_IMU, findRotToLab, filtIMUsig,
                           intp_strides, computeRunSpeedIMU)
 
 
@@ -29,6 +29,12 @@ from IMUFunctions import (align_fuse_extract_IMU, findRotToLab, filtIMUsig,
 fPath = 'C:\\Users\\max.ferguson\\OneDrive - BOA Technology Inc\\PFL Team - General\\Testing Segments\\Outdoor\\TrailRunning\\2026_Performance_Kailas\\IMU\\'
 
 save_on = 1
+
+# Foot contact detection (walking). These were the defaults of the local
+# detector this script used to carry; they are named here so a change is visible
+# in the script rather than buried in IMUFunctions.
+fc_jerk_thresh = 1e5    # squared jerk of ||acc|| needed to seed a candidate
+fc_min_gap = 0.90       # s, shortest time between successive foot contacts
 debug = 1
 
 # High and Low G accelerometers: note that the gyro is in the low G file
@@ -39,71 +45,6 @@ Hentries = [fName for fName in os.listdir(fPath) if fName.endswith('highg.csv') 
 Lentries = [fName for fName in os.listdir(fPath) if fName.endswith('lowg.csv') and ('04241') in fName] 
 
 # Functions
-def estIMU_HS_MS(acc,gyr,t,HS_thresh):
-    """
-    Function to estimate heel-strike and mid-stance indices from the IMU
-
-    Parameters
-    ----------
-    acc : numpy array (Nx3)
-        X,Y,Z acceleration from the IMU
-    gyr : numpy array (Nx3)
-        X,Y,Z gyroscope from the IMU
-    t : numpy array (Nx1)
-        time (seconds)
-    HS_thresh : float/int
-        threshold for detecting when heel strikes (foot contacts)
-
-    Returns
-    -------
-    HS : list
-        Heel-strike (foot contact events) indices
-    MS : list
-        Mid-stance indices
-
-    """
-    # Set up a 2nd order 50 Hz low pass buttworth filter
-    freq = 1/np.mean(np.diff(t))
-    w = 50 / (freq / 2) # Normalize the frequency
-    b, a = sig.butter(2, w, 'low')
-    
-    # Filter the IMU signals
-    acc_filt = np.array([sig.filtfilt(b, a, acc[:,jj]) for jj in range(3)]).T
-    
-    HS_sig = (np.gradient(np.linalg.norm(acc_filt,axis=1),t))**2
-    # HS_sig = (np.gradient(acc_filt[:,2],t))**2
-    gyr_energy = (np.linalg.norm(gyr,axis=1))**2
-    # Create a midstance detection signal
-    idx = np.linalg.norm(acc,axis = 1) > 8*9.81 # Only want values above 2g as they will be excluded, may need to reduce this threshold
-    MS_sig = gyr_energy
-    MS_sig[idx] = 1e6
-    window = 100
-    jj = 400
-    
-    HS = []
-    
-    while jj < len(HS_sig)-1500:
-        if HS_sig[jj] > HS_thresh:
-            # Find the maximum
-            jj = np.argmax(HS_sig[jj:jj+window])+jj         
-            HS_idx = np.argmax(acc[jj-window:jj+window,2])+jj-window
-            pre_vel = np.trapezoid(acc_filt[HS_idx-150:HS_idx ,2],t[HS_idx-150:HS_idx])
-            if pre_vel < 1 and acc[HS_idx,2] > 5:
-                HS.append(HS_idx)
-                jj = jj+300
-        jj = jj+1
-              
-    # Compute the mid-stance indicies: full "for" loop listed below for debugging
-    MS = np.array([(np.argmin(MS_sig[HS[jj]+10:HS[jj]+int((HS[jj+1]-HS[jj])*0.2)])+HS[jj]+10)  for jj in range(len(HS)-1)]) 
-    # MS = []
-    # for jj in range(len(HS)-1):
-    #     print(jj)
-    #     MS.append(np.argmin(MS_sig[HS[jj]+10:HS[jj]+int((HS[jj+1]-HS[jj])*0.2)])+HS[jj]+10)
-    HS = np.array(HS[:-1])
-        
-    
-    return [HS,MS]
-
 def plotStrides(inputAcc, inputGy, inputLandings, goodLandings):
     """
     Function to plot interpolated strides for vertical acceleration and
@@ -117,7 +58,7 @@ def plotStrides(inputAcc, inputGy, inputLandings, goodLandings):
     inputGy : numpy array
         Input gyroscope signal. Ex: inversion/eversion velocity (Nx1) 
     inputLandings : numpy array
-        Detected landings. From IMU: use estIMU_HS_MS (Mx1)
+        Detected landings. From IMU: use estIMU_FC_MS_walking (Mx1)
     goodLandings : numpy array
         Filtered landings usually based on stride time (Qx1)
 
@@ -176,7 +117,8 @@ for ii in range(len(Lentries)):
     # Convert the time
     IMUtime = (IMUtime - IMUtime[0])*(1e-6)        
     # Identify foot contact & midstance
-    [iHS,iMS] = estIMU_HS_MS(iacc,igyr,IMUtime,1e4)
+    [iHS,iMS] = estIMU_FC_MS_walking(iacc,igyr,IMUtime,jerk_thresh=fc_jerk_thresh,
+                                     min_gap=fc_min_gap)
     
     # Examine where the start of the trial is by the 3 jumps
     # There should seem to be 2 "short" strides followed by a pause
@@ -205,7 +147,7 @@ for ii in range(len(Lentries)):
         
     #     if jj > 10:
     #         up_thresh = up_thresh - 2e6
-    #         [iHS,iMS] = estIMU_HS_MS(iacc,igyr,IMUtime,up_thresh)
+    #         [iHS,iMS] = estIMU_FC_MS_walking(iacc,igyr,IMUtime,jerk_thresh=up_thresh)
     #         approx_CT = np.diff(iHS)
     #         iHS_t = IMUtime[iHS]
     #         jj = 0
