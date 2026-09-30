@@ -22,11 +22,11 @@ import addcopyfighandler
 from tkinter import messagebox
 
 from IMUFunctions import (estIMU_FC_MS_walking, align_fuse_extract_IMU, findRotToLab, filtIMUsig,
-                          intp_strides, computeRunSpeedIMU)
+                          intp_strides, computeRunSpeedIMU, selectStudyFoot)
 
 
 # Obtain IMU signals
-fPath = 'C:\\Users\\max.ferguson\\OneDrive - BOA Technology Inc\\PFL Team - General\\Testing Segments\\Outdoor\\TrailRunning\\2026_Performance_Kailas\\IMU\\'
+fPath = 'Z:/Testing Segments/WorkWear/2025/2025_WWDrape_Materials_Danner/IMU/'
 
 save_on = 1
 
@@ -41,8 +41,13 @@ debug = 1
 # Hentries = [fName for fName in os.listdir(fPath) if fName.endswith('highg.csv') ] 
 # Lentries = [fName for fName in os.listdir(fPath) if fName.endswith('lowg.csv')] 
 
-Hentries = [fName for fName in os.listdir(fPath) if fName.endswith('highg.csv') and ('04241') in fName] 
-Lentries = [fName for fName in os.listdir(fPath) if fName.endswith('lowg.csv') and ('04241') in fName] 
+Hentries = [fName for fName in os.listdir(fPath) if fName.endswith('highg.csv') and ('03399') in fName] 
+# One IMU, one foot, for the whole study. Asked once and saved to
+# StudyFoot.npy beside the data; delete that file to change the answer. This
+# sets the sign of the inversion/eversion gyroscope below.
+Foot = selectStudyFoot(fPath)
+
+Lentries = [fName for fName in os.listdir(fPath) if fName.endswith('lowg.csv') and ('03399') in fName] 
 
 # Functions
 def plotStrides(inputAcc, inputGy, inputLandings, goodLandings):
@@ -89,7 +94,6 @@ pAcc = []
 pJerk = []
 rMLacc = []
 rIEgyro = []
-pIEgyro = []
 pEgyro = []
 pIgyro = []
 imuSpeed = []
@@ -195,6 +199,16 @@ for ii in range(len(Lentries)):
         # Filter the IMU signals
         iacc = filtIMUsig(iacc,acc_cut,IMUtime)
         igyr = filtIMUsig(igyr,gyr_cut,IMUtime)
+        # Inversion/eversion is signed about the fore-aft axis and the two feet
+        # are mirror images, so one channel is negated to make the formulas
+        # below mean the same thing on either foot. RIGHT is the reference here,
+        # matching Performance_trailrun_extract_IMU_metrics.py, which reads
+        # Rgyr[:,2] with no negation. The left foot is the one flipped.
+        if Foot == 'Left':
+            ie_gyro = -igyr[:,2]
+        else:
+            ie_gyro = igyr[:,2]
+
         # Compute stride metrics here
         jerk = np.linalg.norm(np.array([np.gradient(iacc[:,jj],IMUtime) for jj in range(3)]),axis=0)
         AccMag = np.linalg.norm(iacc,axis=1)
@@ -204,13 +218,9 @@ for ii in range(len(Lentries)):
             pGyr.append(np.abs(np.min(igyr[iHS[jj]:iHS[jj+1],1])))
             rMLacc.append(np.max(iacc[iHS[jj]:iHS[jj+1],1])-np.min(iacc[iHS[jj]:iHS[jj+1],1]))
             appTO = round(0.2*(iHS[jj+1]-iHS[jj])+iHS[jj])
-            rIEgyro.append(np.max(igyr[iHS[jj]:appTO,2])-np.min(igyr[iHS[jj]:appTO,2]))
-            # Assuming this is the left foot
-            pIEgyro.append(np.max(igyr[iHS[jj]:appTO,2]))
-            pEgyro.append(np.abs(np.min(igyr[iHS[jj]:appTO,2])))
-            pIgyro.append(-np.max(igyr[iHS[jj]:appTO,2]))               # Check directionality - use commented version if they are negative versions of expected values
-            #pEgyro.append(np.max(igyr[iHS[jj]:appTO,2]))
-            #pIgyro.append(np.min(igyr[iHS[jj]:appTO,2]))     # already negative
+            rIEgyro.append(np.max(ie_gyro[iHS[jj]:appTO])-np.min(ie_gyro[iHS[jj]:appTO]))
+            pEgyro.append(abs(np.min(ie_gyro[iHS[jj]:appTO])))
+            pIgyro.append(np.max(ie_gyro[iHS[jj]:appTO]))
             
         # Appending
         oSubject = oSubject + [Subject]*len(iGS)
@@ -223,7 +233,7 @@ for ii in range(len(Lentries)):
     
 outcomes = pd.DataFrame({'Subject':list(oSubject), 'Config': list(oConfig), 'Movement':list(oMovement),
                          'Order': list(oSesh), 'pJerk':list(pJerk),'pAcc':list(pAcc), 'pGyr':list(pGyr),
-                           'rMLacc':list(rMLacc),'rIEgyro':list(rIEgyro),'pIEgyro':list(pIEgyro), 'pIgyro':list(pIgyro),'pEgyro':list(pEgyro),'imuSpeed':list(imuSpeed)})
+                           'rMLacc':list(rMLacc),'rIEgyro':list(rIEgyro),'pIgyro':list(pIgyro),'pEgyro':list(pEgyro),'imuSpeed':list(imuSpeed)})
 
 
 

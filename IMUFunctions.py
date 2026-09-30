@@ -6,6 +6,7 @@ are used across multiple IMU processing scripts.
 @author: Eric.Honert
 """
 
+import os
 import numpy as np
 from numpy import cos, sin, arctan2
 import scipy
@@ -66,6 +67,68 @@ def delimitTrialIMU(SegSig):
     plt.close()
     segidx = pts[:,0]
     return(segidx)
+
+def selectStudyFoot(FilePath):
+    """
+    Ask once which foot the IMU was worn on, and remember it for the study.
+
+    A single-IMU indoor protocol puts the sensor on the same foot for every
+    subject and every trial, so this is a property of the study rather than of
+    a file. It is asked once, saved next to the data as StudyFoot.npy, and read
+    back silently on every later run -- the same load-or-prompt pattern as
+    delimitTrial in XSENSORFunctions.
+
+    It matters because the inversion/eversion gyroscope is signed about the
+    fore-aft axis and the two feet are mirror images, so a formula written for
+    one foot reports eversion where the other reports inversion. Getting it
+    wrong does not raise anything; it silently swaps two output columns.
+
+    To change the answer later, delete StudyFoot.npy and re-run.
+
+    Parameters
+    ----------
+    FilePath : str
+        Folder holding the study's IMU files. The selection is saved here, so
+        it travels with the data rather than with the script.
+
+    Returns
+    -------
+    Foot : str
+        'Left' or 'Right'.
+
+    """
+    savePath = FilePath + 'StudyFoot.npy'
+
+    if os.path.exists(savePath) == True:
+        Foot = str(np.load(savePath, allow_pickle=True))
+        print('Study foot: %s (from StudyFoot.npy)' % Foot)
+        return(Foot)
+
+    # Imported here rather than at the top of the module: IMUFunctions is
+    # imported by scripts that may run without a display, and a missing tk
+    # should not stop them loading.
+    import tkinter as tk
+    from tkinter import messagebox
+
+    root = tk.Tk()
+    root.withdraw()
+    root.attributes('-topmost', True)
+    isLeft = messagebox.askyesno('Study foot',
+                                 'Which foot was the IMU worn on for this study?'
+                                 '\n\nYes  =  LEFT foot'
+                                 '\nNo   =  RIGHT foot')
+    root.destroy()
+
+    if isLeft == True:
+        Foot = 'Left'
+    else:
+        Foot = 'Right'
+
+    np.save(savePath, np.array(Foot, dtype=object))
+    print('Study foot: %s (saved to StudyFoot.npy)' % Foot)
+
+    return(Foot)
+
 
 def xcorr_fun(parent_sig, child_sig, tot_shift):
     """
