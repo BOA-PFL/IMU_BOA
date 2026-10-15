@@ -21,89 +21,35 @@ import os
 import addcopyfighandler
 from tkinter import messagebox
 
-from IMUFunctions import (align_fuse_extract_IMU, findRotToLab, filtIMUsig,
-                          intp_strides, computeRunSpeedIMU)
+from IMUFunctions import (estIMU_FC_MS_walking, align_fuse_extract_IMU, findRotToLab, filtIMUsig,
+                          intp_strides, computeRunSpeedIMU, selectStudyFoot)
 
 
 # Obtain IMU signals
-fPath = 'C:\\Users\\max.ferguson\\OneDrive - BOA Technology Inc\\PFL Team - General\\Testing Segments\\Outdoor\\TrailRunning\\2026_Performance_Kailas\\IMU\\'
+fPath = 'Z:/Testing Segments/WorkWear/2025/2025_WWDrape_Materials_Danner/IMU/'
 
 save_on = 1
+
+# Foot contact detection (walking). These were the defaults of the local
+# detector this script used to carry; they are named here so a change is visible
+# in the script rather than buried in IMUFunctions.
+fc_jerk_thresh = 1e5    # squared jerk of ||acc|| needed to seed a candidate
+fc_min_gap = 0.90       # s, shortest time between successive foot contacts
 debug = 1
 
 # High and Low G accelerometers: note that the gyro is in the low G file
 # Hentries = [fName for fName in os.listdir(fPath) if fName.endswith('highg.csv') ] 
 # Lentries = [fName for fName in os.listdir(fPath) if fName.endswith('lowg.csv')] 
 
-Hentries = [fName for fName in os.listdir(fPath) if fName.endswith('highg.csv') and ('04241') in fName] 
-Lentries = [fName for fName in os.listdir(fPath) if fName.endswith('lowg.csv') and ('04241') in fName] 
+Hentries = [fName for fName in os.listdir(fPath) if fName.endswith('highg.csv') and ('03399') in fName] 
+# One IMU, one foot, for the whole study. Asked once and saved to
+# StudyFoot.npy beside the data; delete that file to change the answer. This
+# sets the sign of the inversion/eversion gyroscope below.
+Foot = selectStudyFoot(fPath)
+
+Lentries = [fName for fName in os.listdir(fPath) if fName.endswith('lowg.csv') and ('03399') in fName] 
 
 # Functions
-def estIMU_HS_MS(acc,gyr,t,HS_thresh):
-    """
-    Function to estimate heel-strike and mid-stance indices from the IMU
-
-    Parameters
-    ----------
-    acc : numpy array (Nx3)
-        X,Y,Z acceleration from the IMU
-    gyr : numpy array (Nx3)
-        X,Y,Z gyroscope from the IMU
-    t : numpy array (Nx1)
-        time (seconds)
-    HS_thresh : float/int
-        threshold for detecting when heel strikes (foot contacts)
-
-    Returns
-    -------
-    HS : list
-        Heel-strike (foot contact events) indices
-    MS : list
-        Mid-stance indices
-
-    """
-    # Set up a 2nd order 50 Hz low pass buttworth filter
-    freq = 1/np.mean(np.diff(t))
-    w = 50 / (freq / 2) # Normalize the frequency
-    b, a = sig.butter(2, w, 'low')
-    
-    # Filter the IMU signals
-    acc_filt = np.array([sig.filtfilt(b, a, acc[:,jj]) for jj in range(3)]).T
-    
-    HS_sig = (np.gradient(np.linalg.norm(acc_filt,axis=1),t))**2
-    # HS_sig = (np.gradient(acc_filt[:,2],t))**2
-    gyr_energy = (np.linalg.norm(gyr,axis=1))**2
-    # Create a midstance detection signal
-    idx = np.linalg.norm(acc,axis = 1) > 8*9.81 # Only want values above 2g as they will be excluded, may need to reduce this threshold
-    MS_sig = gyr_energy
-    MS_sig[idx] = 1e6
-    window = 100
-    jj = 400
-    
-    HS = []
-    
-    while jj < len(HS_sig)-1500:
-        if HS_sig[jj] > HS_thresh:
-            # Find the maximum
-            jj = np.argmax(HS_sig[jj:jj+window])+jj         
-            HS_idx = np.argmax(acc[jj-window:jj+window,2])+jj-window
-            pre_vel = np.trapezoid(acc_filt[HS_idx-150:HS_idx ,2],t[HS_idx-150:HS_idx])
-            if pre_vel < 1 and acc[HS_idx,2] > 5:
-                HS.append(HS_idx)
-                jj = jj+300
-        jj = jj+1
-              
-    # Compute the mid-stance indicies: full "for" loop listed below for debugging
-    MS = np.array([(np.argmin(MS_sig[HS[jj]+10:HS[jj]+int((HS[jj+1]-HS[jj])*0.2)])+HS[jj]+10)  for jj in range(len(HS)-1)]) 
-    # MS = []
-    # for jj in range(len(HS)-1):
-    #     print(jj)
-    #     MS.append(np.argmin(MS_sig[HS[jj]+10:HS[jj]+int((HS[jj+1]-HS[jj])*0.2)])+HS[jj]+10)
-    HS = np.array(HS[:-1])
-        
-    
-    return [HS,MS]
-
 def plotStrides(inputAcc, inputGy, inputLandings, goodLandings):
     """
     Function to plot interpolated strides for vertical acceleration and
@@ -117,7 +63,7 @@ def plotStrides(inputAcc, inputGy, inputLandings, goodLandings):
     inputGy : numpy array
         Input gyroscope signal. Ex: inversion/eversion velocity (Nx1) 
     inputLandings : numpy array
-        Detected landings. From IMU: use estIMU_HS_MS (Mx1)
+        Detected landings. From IMU: use estIMU_FC_MS_walking (Mx1)
     goodLandings : numpy array
         Filtered landings usually based on stride time (Qx1)
 
@@ -148,7 +94,6 @@ pAcc = []
 pJerk = []
 rMLacc = []
 rIEgyro = []
-pIEgyro = []
 pEgyro = []
 pIgyro = []
 imuSpeed = []
@@ -176,7 +121,8 @@ for ii in range(len(Lentries)):
     # Convert the time
     IMUtime = (IMUtime - IMUtime[0])*(1e-6)        
     # Identify foot contact & midstance
-    [iHS,iMS] = estIMU_HS_MS(iacc,igyr,IMUtime,1e4)
+    [iHS,iMS] = estIMU_FC_MS_walking(iacc,igyr,IMUtime,jerk_thresh=fc_jerk_thresh,
+                                     min_gap=fc_min_gap)
     
     # Examine where the start of the trial is by the 3 jumps
     # There should seem to be 2 "short" strides followed by a pause
@@ -205,7 +151,7 @@ for ii in range(len(Lentries)):
         
     #     if jj > 10:
     #         up_thresh = up_thresh - 2e6
-    #         [iHS,iMS] = estIMU_HS_MS(iacc,igyr,IMUtime,up_thresh)
+    #         [iHS,iMS] = estIMU_FC_MS_walking(iacc,igyr,IMUtime,jerk_thresh=up_thresh)
     #         approx_CT = np.diff(iHS)
     #         iHS_t = IMUtime[iHS]
     #         jj = 0
@@ -253,6 +199,16 @@ for ii in range(len(Lentries)):
         # Filter the IMU signals
         iacc = filtIMUsig(iacc,acc_cut,IMUtime)
         igyr = filtIMUsig(igyr,gyr_cut,IMUtime)
+        # Inversion/eversion is signed about the fore-aft axis and the two feet
+        # are mirror images, so one channel is negated to make the formulas
+        # below mean the same thing on either foot. RIGHT is the reference here,
+        # matching Performance_trailrun_extract_IMU_metrics.py, which reads
+        # Rgyr[:,2] with no negation. The left foot is the one flipped.
+        if Foot == 'Left':
+            ie_gyro = -igyr[:,2]
+        else:
+            ie_gyro = igyr[:,2]
+
         # Compute stride metrics here
         jerk = np.linalg.norm(np.array([np.gradient(iacc[:,jj],IMUtime) for jj in range(3)]),axis=0)
         AccMag = np.linalg.norm(iacc,axis=1)
@@ -262,13 +218,9 @@ for ii in range(len(Lentries)):
             pGyr.append(np.abs(np.min(igyr[iHS[jj]:iHS[jj+1],1])))
             rMLacc.append(np.max(iacc[iHS[jj]:iHS[jj+1],1])-np.min(iacc[iHS[jj]:iHS[jj+1],1]))
             appTO = round(0.2*(iHS[jj+1]-iHS[jj])+iHS[jj])
-            rIEgyro.append(np.max(igyr[iHS[jj]:appTO,2])-np.min(igyr[iHS[jj]:appTO,2]))
-            # Assuming this is the left foot
-            pIEgyro.append(np.max(igyr[iHS[jj]:appTO,2]))
-            pEgyro.append(np.abs(np.min(igyr[iHS[jj]:appTO,2])))
-            pIgyro.append(-np.max(igyr[iHS[jj]:appTO,2]))               # Check directionality - use commented version if they are negative versions of expected values
-            #pEgyro.append(np.max(igyr[iHS[jj]:appTO,2]))
-            #pIgyro.append(np.min(igyr[iHS[jj]:appTO,2]))     # already negative
+            rIEgyro.append(np.max(ie_gyro[iHS[jj]:appTO])-np.min(ie_gyro[iHS[jj]:appTO]))
+            pEgyro.append(abs(np.min(ie_gyro[iHS[jj]:appTO])))
+            pIgyro.append(np.max(ie_gyro[iHS[jj]:appTO]))
             
         # Appending
         oSubject = oSubject + [Subject]*len(iGS)
@@ -281,7 +233,7 @@ for ii in range(len(Lentries)):
     
 outcomes = pd.DataFrame({'Subject':list(oSubject), 'Config': list(oConfig), 'Movement':list(oMovement),
                          'Order': list(oSesh), 'pJerk':list(pJerk),'pAcc':list(pAcc), 'pGyr':list(pGyr),
-                           'rMLacc':list(rMLacc),'rIEgyro':list(rIEgyro),'pIEgyro':list(pIEgyro), 'pIgyro':list(pIgyro),'pEgyro':list(pEgyro),'imuSpeed':list(imuSpeed)})
+                           'rMLacc':list(rMLacc),'rIEgyro':list(rIEgyro),'pIgyro':list(pIgyro),'pEgyro':list(pEgyro),'imuSpeed':list(imuSpeed)})
 
 
 

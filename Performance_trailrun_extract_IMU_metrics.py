@@ -121,7 +121,8 @@ pGyr = []
 pJerk = []
 rMLacc = []
 rIEgyro = []
-pIEgyro = []
+pEgyro = []
+pIgyro = []
 pAcc = []
 
 badFileList = []
@@ -260,7 +261,8 @@ for ii in range(0,len(GPStiming)):
                 rMLacc.append(np.max(Racc[RHS[jj]:RHS[jj+1],1])-np.min(Racc[RHS[jj]:RHS[jj+1],1]))
                 appTO = round(0.2*(RHS[jj+1]-RHS[jj])+RHS[jj])
                 rIEgyro.append(np.max(Rgyr[RHS[jj]:appTO,2])-np.min(Rgyr[RHS[jj]:appTO,2]))
-                pIEgyro.append(np.abs(np.min(Rgyr[RHS[jj]:appTO,2])))
+                pEgyro.append(np.abs(np.min(Rgyr[RHS[jj]:appTO,2])))
+                pIgyro.append(np.max(Rgyr[RHS[jj]:appTO,2]))
             
             # Create labels for saving data
             Rlabel = np.array([0]*len(RGS))
@@ -290,7 +292,7 @@ for ii in range(0,len(GPStiming)):
     
         
 outcomes = pd.DataFrame({'Subject':list(oSubject), 'Side':list(oSide), 'Config': list(oConfig),'Sesh': list(oSesh),
-                          'Label':list(oLabel), 'pJerk':list(pJerk), 'pAcc':list(pAcc), 'pGyr':list(pGyr),'rMLacc':list(rMLacc),'rIEgyro':list(rIEgyro),'pIEgyro':list(pIEgyro),'imuSpeed':list(oSpeed)})
+                          'Label':list(oLabel), 'pJerk':list(pJerk), 'pAcc':list(pAcc), 'pGyr':list(pGyr),'rMLacc':list(rMLacc),'rIEgyro':list(rIEgyro),'pEgyro':list(pEgyro),'pIgyro':list(pIgyro),'imuSpeed':list(oSpeed)})
 
 if save_on == 1:
     outcomes.to_csv(fPath+'IMUmetrics.csv',header=True)
